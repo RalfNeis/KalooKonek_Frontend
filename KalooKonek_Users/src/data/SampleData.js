@@ -1,6 +1,6 @@
 export const USER_DATA = {
-  name: "Juan Cruz",
-  firstName: "Juan",
+  name: "Maverick Sandoval",
+  firstName: "Maverick",
   id: "2025-001",
   address: "Brgy. 172, Caloocan City",
   avatar: "🧑🏼‍🦳",

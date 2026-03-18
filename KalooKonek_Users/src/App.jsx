@@ -7,8 +7,8 @@ import {
 
 // SAMPLE DATA 
 const USER_DATA = {
-  name: "Juan Cruz",
-  firstName: "Juan",
+  name: "Maverick Sandoval",
+  firstName: "Maverick",
   id: "2025-001",
   address: "Brgy. 172, Caloocan City",
   avatar: "🧑🏼‍🦳",
@@ -203,13 +203,13 @@ const KKUHealthRecords = ({ navigate }) => (
           <tbody className="divide-y divide-gray-100 text-sm bg-white">
             <tr className="hover:bg-gray-50 transition-colors">
               <td className="px-6 py-4 font-medium text-gray-900">Oct 15, 2025</td>
-              <td className="px-6 py-4 text-gray-600">Dr. Sarah Gomez</td>
+              <td className="px-6 py-4 text-gray-600">Dr. Sean Lucino</td>
               <td className="px-6 py-4 text-gray-600">Annual Physical Exam</td>
               <td className="px-6 py-4 text-right"><button className="text-blue-600 hover:text-blue-800 font-bold text-xs">View Details</button></td>
             </tr>
             <tr className="hover:bg-gray-50 transition-colors">
               <td className="px-6 py-4 font-medium text-gray-900">Aug 02, 2025</td>
-              <td className="px-6 py-4 text-gray-600">Dr. Reyes</td>
+              <td className="px-6 py-4 text-gray-600">Dr. Espiritu</td>
               <td className="px-6 py-4 text-gray-600">Dental Cleaning</td>
               <td className="px-6 py-4 text-right"><button className="text-blue-600 hover:text-blue-800 font-bold text-xs">View Details</button></td>
             </tr>
