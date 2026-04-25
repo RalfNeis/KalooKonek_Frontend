@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Moon, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react'; // Removed Moon from here
 
 const Navbar: React.FC = () => {
   const getLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -33,7 +33,7 @@ const Navbar: React.FC = () => {
 
       {/* Profile & Controls */}
       <div className="flex items-center gap-6">
-        <Moon size={18} className="text-gray-400 cursor-pointer" />
+        {/* Moon icon removed from here */}
         
         <div className="flex items-center gap-2 border-l pl-6 border-gray-100">
           <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center border border-white shadow-sm overflow-hidden">
