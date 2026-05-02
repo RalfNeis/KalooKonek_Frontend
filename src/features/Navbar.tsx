@@ -1,12 +1,21 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LogOut } from 'lucide-react'; // Removed Moon from here
+import { LogOut } from 'lucide-react';
 
-const Navbar: React.FC = () => {
+// 1. Define strict props to fix the IntrinsicAttributes error from Screenshot (3420).jpg
+interface NavbarProps {
+  adminName?: string; // Optional: will default to "Admin" if not provided
+  onLogout: () => void; // Required: must be passed from App.tsx
+}
+
+const Navbar: React.FC<NavbarProps> = ({ adminName, onLogout }) => {
   const getLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
       ? "text-blue-600 border-b-2 border-blue-600 pb-1"
       : "text-gray-400 hover:text-gray-600 transition-colors";
+
+  // Use the adminName as a seed for the avatar so it changes per user
+  const avatarSeed = adminName || "Admin";
 
   return (
     <nav className="flex items-center justify-between px-10 py-4 bg-white border-b border-gray-100 shadow-sm mb-8">
@@ -28,22 +37,28 @@ const Navbar: React.FC = () => {
         <NavLink to="/dashboard" className={getLinkClass}>Dashboard</NavLink>
         <NavLink to="/directory" className={getLinkClass}>Patient Directory</NavLink>
         <NavLink to="/appointments" className={getLinkClass}>Appointments</NavLink>
-        <NavLink to="/settings" className={getLinkClass}> Settings </NavLink>
+        <NavLink to="/settings" className={getLinkClass}>Settings</NavLink>
       </div>
 
       {/* Profile & Controls */}
       <div className="flex items-center gap-6">
-        {/* Moon icon removed from here */}
-        
         <div className="flex items-center gap-2 border-l pl-6 border-gray-100">
           <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center border border-white shadow-sm overflow-hidden">
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Lucino" alt="Dr" />
+            {/* Dynamic Avatar based on adminName */}
+            <img 
+              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`} 
+              alt="Admin Profile" 
+            />
           </div>
-          <span className="text-xs font-bold text-slate-700">Dr. Lucino</span>
+          {/* Displays the actual admin name passed from App.tsx */}
+          <span className="text-xs font-bold text-slate-700">{avatarSeed}</span>
         </div>
 
-        {/* Sign Out Button */}
-        <button className="bg-[#E32636] text-white flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-[#C52230] transition-all">
+        {/* Triggers handleLogout in App.tsx to clear session/Axios headers */}
+        <button 
+          onClick={onLogout}
+          className="bg-[#E32636] text-white flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold shadow-md hover:bg-[#C52230] transition-all"
+        >
           Sign Out <LogOut size={14} />
         </button>
       </div>

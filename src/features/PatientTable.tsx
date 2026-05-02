@@ -1,33 +1,122 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import PatientRow from '../components/PatientRow';
-import type { RecentPatient } from '../types/patient';
 
-// Mock Data (In a real app, this comes from an API)
-const dummyPatients: RecentPatient[] = [
-  { id: '1', time: '09:30 AM', name: 'John Russel Gallanosa', purpose: 'General Checkup', status: 'COMPLETED' },
-  { id: '2', time: '09:15 AM', name: 'Maverick Sandoval', purpose: 'Dental', status: 'COMPLETED' },
-];
+// Resolved the IntrinsicAttributes error from Screenshot (3429).jpg
+interface PatientDirectoryProps {
+  searchTerm?: string;
+}
 
-const PatientTable: React.FC = () => {
-  return (
-    <div className= "bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      {/* Table Header */}
-      <div className = "grid grid-cols-4 bg-gray-50/50 px-6 py-3 border-b border-gray-100">
-        {['TIME', 'NAME', 'PURPOSE', 'STATUS'].map((head) => (
-          <span key = {head} className="text-[10px] font-bold text-gray-400 tracking-widest">
-            {head}
-          </span>
-        ))}
-      </div>
+const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSearch }) => {
+    const [patients, setPatients] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    
+    // Filter States
+    const [localSearchTerm, setLocalSearchTerm] = useState('');
+    const [selectedBarangay, setSelectedBarangay] = useState('All Barangays');
+    const [selectedStatus, setSelectedStatus] = useState('Filter Status');
 
-      {/* Table Body - This is where the magic happens */}
-      <div className = "flex flex-col">
-        {dummyPatients.map((patient) => (
-          <PatientRow key={patient.id} {...patient} />
-        ))}
-      </div>
-    </div>
-  );
+    // Sync external search from Dashboard/Navbar to local state
+    useEffect(() => {
+        if (externalSearch !== undefined) {
+            setLocalSearchTerm(externalSearch);
+        }
+    }, [externalSearch]);
+
+    // Data Fetching Logic
+    useEffect(() => {
+        const fetchDirectory = async () => {
+            setIsLoading(true);
+            try {
+                // Hits the directory endpoint with all filter parameters
+                const response = await axios.get(`http://127.0.0.1:8000/accounts/directory/`, {
+                    params: {
+                        search: localSearchTerm,
+                        barangay: selectedBarangay === 'All Barangays' ? '' : selectedBarangay,
+                        status: selectedStatus === 'Filter Status' ? '' : selectedStatus
+                    }
+                });
+                setPatients(response.data);
+            } catch (error) {
+                console.error("Directory fetch failed:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        // Debounce prevents rapid-fire API calls while typing
+        const debounceTimer = setTimeout(fetchDirectory, 300);
+        return () => clearTimeout(debounceTimer);
+    }, [localSearchTerm, selectedBarangay, selectedStatus]);
+
+    return (
+        <div className="flex flex-col gap-6">
+            {/* Filter Bar Layout */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input 
+                    type="text"
+                    placeholder="Search name or ID..."
+                    className="p-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    value={localSearchTerm}
+                    onChange={(e) => setLocalSearchTerm(e.target.value)}
+                />
+                
+                <select 
+                    className="p-3 border border-gray-200 rounded-xl text-sm outline-none cursor-pointer bg-white"
+                    value={selectedBarangay}
+                    onChange={(e) => setSelectedBarangay(e.target.value)}
+                >
+                    <option>All Barangays</option>
+                    <option>Brgy. 171</option>
+                    <option>Brgy. 172</option>
+                </select>
+
+                <select 
+                    className="p-3 border border-gray-200 rounded-xl text-sm outline-none cursor-pointer bg-white"
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                >
+                    <option>Filter Status</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="PENDING">Pending</option>
+                </select>
+            </div>
+
+            {/* Directory Table */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* Table Header */}
+                <div className="grid grid-cols-5 bg-gray-50/50 px-6 py-3 border-b border-gray-100 text-[10px] font-bold text-gray-400 tracking-widest">
+                    <span>PATIENT NAME & ID</span>
+                    <span>AGE / GENDER</span>
+                    <span>BARANGAY</span>
+                    <span>LAST VISIT</span>
+                    <span>ACTIONS</span>
+                </div>
+
+                {/* Table Body - Using min-h-50 as suggested in Screenshot (3432).jpg */}
+                <div className="flex flex-col min-h-50">
+                    {isLoading ? (
+                        <div className="flex-1 flex items-center justify-center p-10 text-center animate-pulse text-xs text-gray-400">
+                            Updating Directory...
+                        </div>
+                    ) : patients.length > 0 ? (
+                        patients.map((patient: any) => (
+                            <PatientRow key={patient.id} {...patient} />
+                        ))
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center p-10 text-center text-gray-400 text-xs italic">
+                            No patients found for "{localSearchTerm}"
+                        </div>
+                    )}
+                </div>
+            </div>
+            
+            {/* Footer Summary */}
+            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest px-1">
+                Total: {patients.length} Registered Patients
+            </div>
+        </div>
+    );
 };
 
 export default PatientTable;
