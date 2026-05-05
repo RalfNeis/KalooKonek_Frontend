@@ -19,7 +19,9 @@ const PatientRow: React.FC<PatientRowProps> = ({
             
             {/* COLUMN 1: PATIENT NAME & ID */}
             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-orange-100 shrink-0" /> {/* Avatar Circle */}
+                <div className="w-10 h-10 rounded-full bg-orange-100 shrink-0 flex items-center justify-center text-orange-600 font-bold text-xs">
+                    {name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                </div>
                 <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                         <span className="text-[13px] font-bold text-gray-800">{name}</span>

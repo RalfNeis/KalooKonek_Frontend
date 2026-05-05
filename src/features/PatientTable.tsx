@@ -2,56 +2,63 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import PatientRow from '../components/PatientRow';
 
-// Resolved the IntrinsicAttributes error from Screenshot (3429).jpg
 interface PatientDirectoryProps {
-  searchTerm?: string;
+    searchTerm?: string;
 }
 
 const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSearch }) => {
-    const [patients, setPatients] = useState([]);
+    const [patients, setPatients] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
-    // Filter States
     const [localSearchTerm, setLocalSearchTerm] = useState('');
     const [selectedBarangay, setSelectedBarangay] = useState('All Barangays');
     const [selectedStatus, setSelectedStatus] = useState('Filter Status');
 
-    // Sync external search from Dashboard/Navbar to local state
     useEffect(() => {
         if (externalSearch !== undefined) {
             setLocalSearchTerm(externalSearch);
         }
     }, [externalSearch]);
 
-    // Data Fetching Logic
     useEffect(() => {
         const fetchDirectory = async () => {
             setIsLoading(true);
             try {
-                // Hits the directory endpoint with all filter parameters
+                const savedSession = localStorage.getItem('kka_admin_session');
+                const sessionData = savedSession ? JSON.parse(savedSession) : null;
+                const token = sessionData?.token;
+
+                if (!token) {
+                    setIsLoading(false);
+                    return;
+                }
+
                 const response = await axios.get(`http://127.0.0.1:8000/accounts/directory/`, {
                     params: {
                         search: localSearchTerm,
                         barangay: selectedBarangay === 'All Barangays' ? '' : selectedBarangay,
                         status: selectedStatus === 'Filter Status' ? '' : selectedStatus
+                    },
+                    headers: {
+                        'Authorization': `Token ${token}`,
+                        'Accept': 'application/json',
                     }
                 });
+                
                 setPatients(response.data);
             } catch (error) {
-                console.error("Directory fetch failed:", error);
+                console.error("❌ Directory fetch failed:", error);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        // Debounce prevents rapid-fire API calls while typing
         const debounceTimer = setTimeout(fetchDirectory, 300);
         return () => clearTimeout(debounceTimer);
     }, [localSearchTerm, selectedBarangay, selectedStatus]);
 
     return (
         <div className="flex flex-col gap-6">
-            {/* Filter Bar Layout */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <input 
                     type="text"
@@ -82,18 +89,15 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                 </select>
             </div>
 
-            {/* Directory Table */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                {/* Table Header */}
                 <div className="grid grid-cols-5 bg-gray-50/50 px-6 py-3 border-b border-gray-100 text-[10px] font-bold text-gray-400 tracking-widest">
                     <span>PATIENT NAME & ID</span>
                     <span>AGE / GENDER</span>
                     <span>BARANGAY</span>
                     <span>LAST VISIT</span>
-                    <span>ACTIONS</span>
+                    <span className="text-right">ACTIONS</span>
                 </div>
 
-                {/* Table Body - Using min-h-50 as suggested in Screenshot (3432).jpg */}
                 <div className="flex flex-col min-h-50">
                     {isLoading ? (
                         <div className="flex-1 flex items-center justify-center p-10 text-center animate-pulse text-xs text-gray-400">
@@ -101,17 +105,23 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                         </div>
                     ) : patients.length > 0 ? (
                         patients.map((patient: any) => (
-                            <PatientRow key={patient.id} {...patient} />
+                            <PatientRow 
+                                key={patient.id} 
+                                {...patient} 
+                                // Mapping the backend "last_visit" to your frontend "last_visit_date"
+                                last_visit_date={patient.last_visit}
+                                // Example: If you want to show a hardcoded tag for now
+                                medical_tags={patient.age >= 60 ? ["SENIOR"] : []}
+                            />
                         ))
                     ) : (
                         <div className="flex-1 flex items-center justify-center p-10 text-center text-gray-400 text-xs italic">
-                            No patients found for "{localSearchTerm}"
+                            No patients found {localSearchTerm && `for "${localSearchTerm}"`}
                         </div>
                     )}
                 </div>
             </div>
             
-            {/* Footer Summary */}
             <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest px-1">
                 Total: {patients.length} Registered Patients
             </div>

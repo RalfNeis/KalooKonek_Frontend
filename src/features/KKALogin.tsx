@@ -81,39 +81,58 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
   const navigate = useNavigate();
 
   const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+      e.preventDefault();
+      setLoading(true);
 
-    try {
-      // 1. Call the Django Backend with the clean URL and trailing slash
-      const response = await axios.post('http://127.0.0.1:8000/accounts/login/', {
-          username: id,
-          password: pw
-      });
+      try {
+          // Correct endpoint aligned with core/accounts routing
+          const response = await axios.post('http://127.0.0.1:8000/accounts/login/', {
+              username: id,
+              password: pw
+          });
 
-      // 2. Handle the response data
-      if (response.data) {
-        // Store the token in localStorage so other pages can use it for 'get_profile'
-        const token = response.data.access_token || response.data.token;
-        if (token) {
-            localStorage.setItem("sb-access-token", token);
-        }
+          if (response.data) {
+              // Extraction covers common Django response keys (TokenAuth, SimpleJWT, Knox)
+              const tokenValue = response.data.token || 
+                                 response.data.access || 
+                                 response.data.key || 
+                                 response.data.access_token;
+              
+              if (tokenValue) {
+                  // Construct the specific session object PatientTable.tsx expects
+                  const sessionData = {
+                      token: tokenValue, 
+                      adminId: id,
+                      ...response.data
+                  };
 
-        onLoginSuccess({ 
-          adminId: id, 
-          ...response.data 
-        }); 
-        
-        navigate("/dashboard"); 
+                  // Clear stale data and save fresh session
+                  localStorage.removeItem("kka_admin_session");
+                  localStorage.setItem("kka_admin_session", JSON.stringify(sessionData));
+                  
+                  // Optional: maintain legacy key for other parts of the app
+                  localStorage.setItem("sb-access-token", tokenValue);
+
+                  onLoginSuccess(sessionData); 
+                  navigate("/dashboard"); 
+              } else {
+                  alert("Authentication successful, but no token was provided by the server.");
+              }
+          }
+      } catch (error: any) {
+          console.error("Login failed:", error);
+          
+          if (error.response?.status === 404) {
+              alert("Endpoint not found. Please check your Django URL configuration.");
+          } else {
+              const errMsg = error.response?.data?.error || 
+                             error.response?.data?.detail || 
+                             "Invalid Admin ID or Password.";
+              alert(errMsg);
+          }
+      } finally {
+          setLoading(false);
       }
-    } catch (error: any) {
-      console.error("Login failed:", error);
-      // Detailed error message from backend if available
-      const errMsg = error.response?.data?.error || "Invalid Admin ID or Password. Please try again.";
-      alert(errMsg);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const leftPanelProps = {
