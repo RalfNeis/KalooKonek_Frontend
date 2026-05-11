@@ -8,7 +8,15 @@ const NAV_ITEMS = [
   { label: "LOGS", path: "/logs" },
 ];
 
-export default function Navbar({ darkMode, onToggleDark }) {
+// Add 'user' to the props
+export default function Navbar({ darkMode, onToggleDark, user }) {
+  
+  // Helper to get initials (e.g., "Raphael Espiritu" -> "RE")
+  const getInitials = (name) => {
+    if (!name) return "??";
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
   return (
     <nav style={{
       background: darkMode ? "#1e1e1e" : "#fff",
@@ -63,15 +71,27 @@ export default function Navbar({ darkMode, onToggleDark }) {
         <button onClick={onToggleDark} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>
           {darkMode ? "☀️" : "🌙"}
         </button>
+        
+        {/* Dynamic Profile Section */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#cc2222", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
-            JD
+          <div style={{ 
+            width: 32, height: 32, borderRadius: "50%", 
+            background: "#cc2222", color: "#fff", 
+            display: "flex", alignItems: "center", justifyContent: "center", 
+            fontSize: 12, fontWeight: 700 
+          }}>
+            {getInitials(user?.full_name)}
           </div>
           <div>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: darkMode ? "#fff" : "#111", lineHeight: 1.2 }}>Raphael</p>
-            <p style={{ margin: 0, fontSize: 10, color: "#aaa", lineHeight: 1.2 }}>Admin</p>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: darkMode ? "#fff" : "#111", lineHeight: 1.2 }}>
+                {user?.full_name || "Guest"}
+            </p>
+            <p style={{ margin: 0, fontSize: 10, color: "#aaa", lineHeight: 1.2, textTransform: 'capitalize' }}>
+                {user?.role || "User"}
+            </p>
           </div>
         </div>
+
         <button style={{ display: "flex", alignItems: "center", gap: 6, background: "#cc2222", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit', sans-serif" }}>
           Sign Out
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">

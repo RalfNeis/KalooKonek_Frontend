@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../supabaseClient";
 
 const PAGES = {
   SIGNIN: "signin",
@@ -22,7 +23,6 @@ const LeftPanel = ({ title, subtitle, description }) => (
     flexShrink: 0,
     boxSizing: "border-box",
   }}>
-    {/* Blurred orbs */}
     <div style={{
       position: "absolute", top: "20%", left: "10%", width: 220, height: 220,
       background: "radial-gradient(circle, rgba(180,30,30,0.45) 0%, transparent 70%)",
@@ -35,7 +35,6 @@ const LeftPanel = ({ title, subtitle, description }) => (
     }} />
 
     <div style={{ position: "relative", zIndex: 1 }}>
-      {/* Logo */}
       <div className="flex items-center gap-2 mb-16">
         <div style={{
           width: 36, height: 36, background: "rgba(255,255,255,0.12)",
@@ -54,7 +53,6 @@ const LeftPanel = ({ title, subtitle, description }) => (
         </span>
       </div>
 
-      {/* Main text */}
       <h1 style={{
         fontFamily: "'Outfit', sans-serif", fontSize: 38, fontWeight: 700,
         lineHeight: 1.15, letterSpacing: "-0.01em", marginBottom: 20,
@@ -77,7 +75,7 @@ const LeftPanel = ({ title, subtitle, description }) => (
   </div>
 );
 
-const BadgePill = ({ icon, text }) => (
+const BadgePill = ({ text }) => (
   <div style={{
     display: "inline-flex", alignItems: "center", gap: 6,
     border: "1px solid #e85555", borderRadius: 999,
@@ -123,17 +121,19 @@ const InputField = ({ label, id, type = "text", placeholder, rightLabel, onRight
   </div>
 );
 
-const PrimaryButton = ({ children, onClick }) => (
+const PrimaryButton = ({ children, onClick, disabled }) => (
   <button
     onClick={onClick}
+    disabled={disabled}
     style={{
-      width: "100%", padding: "12px", background: "#cc2222",
+      width: "100%", padding: "12px", background: disabled ? "#aaa" : "#cc2222",
       color: "white", border: "none", borderRadius: 8, fontSize: 15,
-      fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit', sans-serif",
+      fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
+      fontFamily: "'Outfit', sans-serif",
       letterSpacing: "0.01em", transition: "background 0.2s",
     }}
-    onMouseEnter={e => e.target.style.background = "#b01c1c"}
-    onMouseLeave={e => e.target.style.background = "#cc2222"}
+    onMouseEnter={e => { if (!disabled) e.target.style.background = "#b01c1c"; }}
+    onMouseLeave={e => { if (!disabled) e.target.style.background = "#cc2222"; }}
   >
     {children}
   </button>
@@ -142,6 +142,53 @@ const PrimaryButton = ({ children, onClick }) => (
 const SignInPage = ({ onForgot, onRequest }) => {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    if (!id || !pw) {
+      alert("Please enter your email and password.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Step 1: Sign in with Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: id,
+        password: pw,
+      });
+
+      if (error) throw error;
+
+      const token = data.session.access_token;
+
+      // Step 2: Verify the user is an admin via Django
+      // FIX: Use the correct admin-check endpoint, not /accounts/profile/
+      const response = await fetch("http://127.0.0.1:8000/accounts/profile/", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  },
+});
+
+if (!response.ok) {
+  await supabase.auth.signOut(); // CRITICAL: Clear the session if backend rejects it
+  alert("Access denied. You do not have admin privileges.");
+  return;
+}
+
+      // Step 3: Redirect — use window.location to avoid race condition
+      // with App.jsx's onAuthStateChange listener
+      window.location.href = "/dashboard";
+
+    } catch (err) {
+      alert("Login failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div>
@@ -150,10 +197,27 @@ const SignInPage = ({ onForgot, onRequest }) => {
       <p style={{ fontSize: 13, color: "#777", marginBottom: 28, fontFamily: "'Outfit', sans-serif" }}>
         Enter your administrative credentials to access the dashboard.
       </p>
-      <InputField label="Admin ID / Email" id="adminId" placeholder="e.g. 2025-001" value={id} onChange={e => setId(e.target.value)} />
-      <InputField label="Password" id="password" type="password" placeholder="••••••••" rightLabel="Forgot password?" onRightClick={onForgot} value={pw} onChange={e => setPw(e.target.value)} />
+      <InputField
+        label="Admin Email"
+        id="adminId"
+        placeholder="admin@caloocan.gov.ph"
+        value={id}
+        onChange={e => setId(e.target.value)}
+      />
+      <InputField
+        label="Password"
+        id="password"
+        type="password"
+        placeholder="••••••••"
+        rightLabel="Forgot password?"
+        onRightClick={onForgot}
+        value={pw}
+        onChange={e => setPw(e.target.value)}
+      />
       <div style={{ marginTop: 8, marginBottom: 20 }}>
-        <PrimaryButton>Sign In</PrimaryButton>
+        <PrimaryButton onClick={handleSignIn} disabled={loading}>
+          {loading ? "Signing in..." : "Sign In"}
+        </PrimaryButton>
       </div>
       <p style={{ textAlign: "center", fontSize: 13, color: "#777", fontFamily: "'Outfit', sans-serif" }}>
         Need admin access?{" "}
@@ -168,16 +232,24 @@ const SignInPage = ({ onForgot, onRequest }) => {
 const ForgotPage = ({ onBack }) => {
   const [email, setEmail] = useState("");
 
+  const handleReset = async () => {
+    if (!email) { alert("Please enter your email."); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) { alert("Error: " + error.message); return; }
+    alert("Reset link sent! Check your email.");
+    onBack();
+  };
+
   return (
     <div>
-      <BadgePill text="SECURITY PROTOCOL" />
-      <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 28, fontWeight: 700, marginBottom: 6, color: "#111" }}>Reset Password</h2>
+      <BadgePill text="ACCOUNT RECOVERY" />
+      <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 28, fontWeight: 700, marginBottom: 6, color: "#111" }}>Forgot Password</h2>
       <p style={{ fontSize: 13, color: "#777", marginBottom: 28, fontFamily: "'Outfit', sans-serif" }}>
         Enter your registered official email address and we'll send you instructions to reset your password.
       </p>
       <InputField label="Official Admin Email" id="adminEmail" placeholder="admin@caloocan.gov.ph" value={email} onChange={e => setEmail(e.target.value)} />
       <div style={{ marginTop: 8, marginBottom: 20 }}>
-        <PrimaryButton>Send Reset Link</PrimaryButton>
+        <PrimaryButton onClick={handleReset}>Send Reset Link</PrimaryButton>
       </div>
       <p style={{ textAlign: "center", fontSize: 13, color: "#777", fontFamily: "'Outfit', sans-serif" }}>
         Remembered your password?{" "}
@@ -189,18 +261,19 @@ const ForgotPage = ({ onBack }) => {
   );
 };
 
-const SelectField = ({ label, id, options, placeholder }) => (
+const SelectField = ({ label, id, options, placeholder, value, onChange }) => (
   <div style={{ marginBottom: 18 }}>
     <label htmlFor={id} style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#333", marginBottom: 6, fontFamily: "'Outfit', sans-serif" }}>
       {label}
     </label>
     <select
       id={id}
-      defaultValue=""
+      value={value}
+      onChange={e => onChange(e.target.value)}
       style={{
         width: "100%", padding: "10px 14px", border: "1.5px solid #e8e8e8",
         borderRadius: 8, fontSize: 14, outline: "none", background: "#fafafa",
-        fontFamily: "'Outfit', sans-serif", boxSizing: "border-box", color: "#999",
+        fontFamily: "'Outfit', sans-serif", boxSizing: "border-box", color: value ? "#333" : "#999",
         appearance: "none",
       }}
       onFocus={e => e.target.style.borderColor = "#e85555"}
@@ -213,7 +286,46 @@ const SelectField = ({ label, id, options, placeholder }) => (
 );
 
 const RequestPage = ({ onSignIn }) => {
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", empId: "" });
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    empId: "",
+    barangay: "",
+    role: ""
+  });
+
+  const handleRequest = async () => {
+    if (!form.firstName || !form.lastName || !form.email || !form.empId) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: form.email,
+        password: "TemporaryPassword123!",
+        options: {
+          data: {
+            first_name: form.firstName,
+            last_name: form.lastName,
+            employee_id: form.empId,
+            barangay: form.barangay,
+            role: "staff",
+            position: form.role,
+            is_approved: false,
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      alert("Request submitted! Please check your email for a verification link. Admin approval is required before you can sign in.");
+      onSignIn();
+    } catch (err) {
+      alert("Registration Error: " + err.message);
+    }
+  };
 
   return (
     <div>
@@ -222,6 +334,7 @@ const RequestPage = ({ onSignIn }) => {
       <p style={{ fontSize: 13, color: "#777", marginBottom: 28, fontFamily: "'Outfit', sans-serif" }}>
         Fill out the form below. Approval usually takes 1–2 business days.
       </p>
+
       <div className="flex gap-3">
         <div style={{ flex: 1 }}>
           <InputField label="First Name" id="firstName" placeholder="Juan" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
@@ -230,13 +343,32 @@ const RequestPage = ({ onSignIn }) => {
           <InputField label="Last Name" id="lastName" placeholder="Dela Cruz" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
         </div>
       </div>
+
       <InputField label="Official Email Address" id="reqEmail" placeholder="name@caloocan.gov.ph" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
       <InputField label="Employee / Government ID Number" id="empId" placeholder="e.g. EMP-2025-XXXX" value={form.empId} onChange={e => setForm({ ...form, empId: e.target.value })} />
-      <SelectField label="Assigned Barangay" id="barangay" placeholder="Select your Barangay" options={["Barangay 1", "Barangay 2", "Barangay 3", "Barangay 4", "Barangay 5"]} />
-      <SelectField label="Role / Position" id="role" placeholder="Select your Role" options={["Barangay Captain", "Secretary", "Treasurer", "Health Worker", "IT Staff"]} />
+
+      <SelectField
+        label="Assigned Barangay"
+        id="barangay"
+        placeholder="Select your Barangay"
+        options={["Barangay 1", "Barangay 2", "Barangay 3", "Barangay 4", "Barangay 5"]}
+        value={form.barangay}
+        onChange={val => setForm({ ...form, barangay: val })}
+      />
+
+      <SelectField
+        label="Role / Position"
+        id="role"
+        placeholder="Select your Role"
+        options={["Barangay Captain", "Secretary", "Treasurer", "Health Worker", "IT Staff"]}
+        value={form.role}
+        onChange={val => setForm({ ...form, role: val })}
+      />
+
       <div style={{ marginTop: 8, marginBottom: 20 }}>
-        <PrimaryButton>Submit Request</PrimaryButton>
+        <PrimaryButton onClick={handleRequest}>Submit Request</PrimaryButton>
       </div>
+
       <p style={{ textAlign: "center", fontSize: 13, color: "#777", fontFamily: "'Outfit', sans-serif" }}>
         Already have an account?{" "}
         <button onClick={onSignIn} style={{ color: "#e85555", background: "none", border: "none", cursor: "pointer", fontFamily: "'Outfit', sans-serif", fontSize: 13, fontWeight: 600 }}>
@@ -276,7 +408,6 @@ export default function KKALogin() {
       <div style={{ display: "flex", minHeight: "100vh", background: darkMode ? "#1a1a1a" : "#fff" }}>
         <LeftPanel {...props} />
 
-        {/* Right panel */}
         <div style={{
           flex: 1, display: "flex", flexDirection: "column", justifyContent: "center",
           alignItems: "center", padding: "40px 20px",
@@ -296,7 +427,6 @@ export default function KKALogin() {
               <RequestPage onSignIn={() => setPage(PAGES.SIGNIN)} />
             )}
 
-            {/* Switch Theme */}
             <div style={{ textAlign: "center", marginTop: 24 }}>
               <button
                 onClick={() => setDarkMode(!darkMode)}

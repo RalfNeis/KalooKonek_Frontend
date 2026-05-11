@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
 const NAV_ITEMS = ["DASHBOARD", "VERIFY USERS", "APPOINTMENTS", "ANNOUNCEMENTS", "LOGS"];
 
@@ -76,14 +78,14 @@ const NavLink = ({ label, active, onClick }) => (
   </button>
 );
 
-const StatCard = () => (
+const StatCard = ({ count }) => (
   <div style={styles.card}>
-    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#aaa", margin: "0 0 8px", textTransform: "uppercase" }}>
-      Registered Seniors
-    </p>
+    <p style={{ ...styles.labelStyle }}>Registered Seniors</p>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
       <div>
-        <p style={{ fontSize: 34, fontWeight: 700, color: "#111", margin: "0 0 8px" }}>12,450</p>
+        <p style={{ fontSize: 34, fontWeight: 700, color: "#111", margin: "0 0 8px" }}>
+          {count.toLocaleString()} {/* Automatically adds commas to numbers */}
+        </p>
         <span style={{
           display: "inline-flex", alignItems: "center", gap: 4,
           fontSize: 11, color: "#22aa66", fontWeight: 600,
@@ -213,15 +215,16 @@ const ReviewBtn = () => {
   );
 };
 
-const NeedsApprovalTable = () => {
-  const rows = [
-    { initials: "RG", color: "#888", name: "Russel Gallanosa", id: "ID: 2024-REQ-88", barangay: "Brgy. 172", date: "Today, 9:20 AM" },
-    { initials: "NG", color: "#c0784a", name: "Neo Gariando", id: "ID: 2024-REQ-87", barangay: "Brgy. 12", date: "Yesterday, 4:15 PM" },
-  ];
-
+const NeedsApprovalTable = ({ applicants = [] }) => {
   return (
     <div style={styles.tableWrap}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px 12px" }}>
+      {/* Header Section */}
+      <div style={{ 
+        display: "flex", 
+        justifyContent: "space-between", 
+        alignItems: "center", 
+        padding: "16px 20px 12px" 
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#cc2222" strokeWidth="2.5">
             <circle cx="12" cy="12" r="10"/>
@@ -230,7 +233,15 @@ const NeedsApprovalTable = () => {
           </svg>
           <span style={{ fontWeight: 700, fontSize: 14, color: "#111" }}>Needs Approval</span>
         </div>
-        <button style={{ background: "none", border: "none", color: "#cc2222", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit', sans-serif" }}>
+        <button style={{ 
+          background: "none", 
+          border: "none", 
+          color: "#cc2222", 
+          fontSize: 13, 
+          fontWeight: 600, 
+          cursor: "pointer", 
+          fontFamily: "'Outfit', sans-serif" 
+        }}>
           View All
         </button>
       </div>
@@ -240,39 +251,66 @@ const NeedsApprovalTable = () => {
           <tr style={{ background: "#fafafa" }}>
             <th style={styles.th}>Applicant</th>
             <th style={styles.th}>Barangay</th>
-            <th style={styles.th}>Date</th>
+            <th style={styles.th}>Date Requested</th>
             <th style={styles.th}>Action</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} style={{ borderBottom: i < rows.length - 1 ? "1px solid #f5f5f5" : "none" }}>
-              <td style={styles.td}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <Avatar initials={r.initials} color={r.color} />
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: "#111" }}>{r.name}</p>
-                    <p style={{ margin: 0, fontSize: 11, color: "#aaa" }}>{r.id}</p>
+          {applicants.length > 0 ? (
+            applicants.map((applicant, index) => (
+              <tr 
+                key={applicant.id || index} 
+                style={{ borderBottom: index < applicants.length - 1 ? "1px solid #f5f5f5" : "none" }}
+              >
+                <td style={styles.td}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Avatar 
+                      initials={applicant.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || "??"} 
+                      color={applicant.role === 'staff' ? "#cc2222" : "#888"} 
+                    />
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: "#111" }}>
+                        {applicant.full_name}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 11, color: "#aaa" }}>
+                        {applicant.employee_id || `ID: ${applicant.id}`}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </td>
+                <td style={styles.td}>
+                  <span style={{
+                    background: "#f0f0f0", 
+                    borderRadius: 6,
+                    padding: "3px 10px", 
+                    fontSize: 12, 
+                    fontWeight: 600, 
+                    color: "#555",
+                  }}>
+                    {applicant.barangay || "N/A"}
+                  </span>
+                </td>
+                <td style={{ ...styles.td, color: "#777" }}>
+                  {/* Formats ISO date string to a readable format */}
+                  {applicant.created_at ? new Date(applicant.created_at).toLocaleDateString() : "Pending"}
+                </td>
+                <td style={styles.td}>
+                  <ReviewBtn onClick={() => console.log("Reviewing:", applicant.id)} />
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan="4" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#aaa' }}>
+                No pending approval requests.
               </td>
-              <td style={styles.td}>
-                <span style={{
-                  background: "#f0f0f0", borderRadius: 6,
-                  padding: "3px 10px", fontSize: 12, fontWeight: 600, color: "#555",
-                }}>
-                  {r.barangay}
-                </span>
-              </td>
-              <td style={{ ...styles.td, color: "#777" }}>{r.date}</td>
-              <td style={styles.td}><ReviewBtn /></td>
             </tr>
-          ))}
+          )}
         </tbody>
       </table>
 
-      {/* Empty space filler */}
-      <div style={{ height: 120 }} />
+      {/* Spacing for layout consistency */}
+      <div style={{ height: applicants.length < 3 ? 120 : 20 }} />
     </div>
   );
 };
@@ -367,35 +405,98 @@ const SystemEvents = () => {
 }; //
 
 export default function AdminDashboard() {
-  const [activeNav, setActiveNav] = useState("DASHBOARD");
+  const navigate = useNavigate(); // Added for redirection
   const [darkMode, setDarkMode] = useState(false);
+  const [data, setData] = useState({
+    user: { full_name: "Admin" }, // Default fallback
+    stats: { seniors: 0, pending: 0, appointments: 0 },
+    applicants: []
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const getDashboardData = async () => {
+      try {
+        // 1. CHECK LOGIN STATUS FIRST
+        const { data: { session } } = await supabase.auth.getSession();
+
+// --- LOGIN STATUS LOG ---
+if (session) {
+  console.log("✅ Logged in as:", session.user.email);
+  console.log("🪪 User ID:", session.user.id);
+  console.log("🔑 Token expires at:", new Date(session.expires_at * 1000).toLocaleString());
+} else {
+  console.log("❌ Not logged in — redirecting to /login");
+}
+        
+        // If no session exists, kick them out to the login page immediately
+        if (!session) {
+          navigate('/login'); // Ensure this matches your login route in App.js
+          return;
+        }
+
+        // 2. FETCH DATA IF LOGGED IN
+        const response = await fetch('http://127.0.0.1:8000/accounts/profile/', {
+          headers: { 
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          setData(result);
+        } else if (response.status === 401 || response.status === 403) {
+          const errorData = await response.json();
+          console.error("Backend rejection reason:", errorData);
+
+          //navigate('/login');
+        }
+      } catch (err) {
+        console.error("Failed to connect to backend:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    getDashboardData();
+  }, [navigate]);
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Loading KalooKonek...</div>;
 
   return (
     <>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
       <div style={{ ...styles.page, background: darkMode ? "#1a1a1a" : "#f4f5f7" }}>
-
-        {/* MAIN */}
         <main style={{ ...styles.main }}>
-          {/* Welcome */}
+          {/* Welcome - Dynamic Name */}
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: darkMode ? "#fff" : "#111", margin: "0 0 4px" }}>
-              Welcome back, Raphael!
+              Welcome back, {data.user.full_name}!
             </h1>
             <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>Here is what's happening in KalooKonek today.</p>
+            <button 
+  onClick={async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  }}
+  style={{ padding: '10px', background: 'red', color: 'white', cursor: 'pointer' }}
+>
+  DEBUG: FORCE LOGOUT 
+</button>
           </div>
 
-          {/* Stats */}
+          {/* Stats - Pass dynamic counts to cards */}
           <div style={styles.statsGrid}>
-            <StatCard />
-            <PendingCard />
-            <AppointmentsCard />
+            <StatCard count={data.stats.seniors} />
+            <PendingCard count={data.stats.pending} />
+            <AppointmentsCard count={data.stats.appointments} />
             <SystemStatusCard />
           </div>
 
-          {/* Bottom section */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, marginTop: 20, paddingBottom: 32 }}>
-            <NeedsApprovalTable />
+            {/* Pass list of applicants from Django */}
+            <NeedsApprovalTable applicants={data.applicants} />
             <div>
               <QuickAnnouncement />
               <SystemEvents />
@@ -426,3 +527,16 @@ export default function AdminDashboard() {
     </>
   );
 }
+
+const checkLoginStatus = async () => {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (session) {
+    console.log("Logged in as:", session?.access_token);
+    // The session.user.id is what you use to fetch the UserProfile
+  } else {
+    console.log("Not logged in");
+    // Redirect to KKALogin.jsx
+  }
+};
+
