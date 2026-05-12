@@ -1,72 +1,89 @@
 import React, { useState } from 'react';
-import { Lock, ShieldCheck, ChevronRight } from 'lucide-react';
+import axios from 'axios';
 
 const AccountSecurity: React.FC = () => {
-  const [passwords, setPasswords] = useState({ current: '', next: '' });
+    const [passwords, setPasswords] = useState({
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
+    });
+    const [loading, setLoading] = useState(false);
 
-  const handleUpdate = () => {
-    // This is where you'll call your Django API
-    console.log("Updating password to:", passwords.next);
-  };
+    const handlePasswordChange = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        if (passwords.new_password !== passwords.confirm_password) {
+            alert("New passwords do not match!");
+            return;
+        }
 
-  return (
-    <div className="space-y-6">
-      {/* Change Password Card */}
-      <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-50 rounded-lg">
-            <Lock size={20} className="text-blue-600" />
-          </div>
-          <div>
+        setLoading(true);
+        try {
+            const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
+            const token = sessionData.token;
+
+            const response = await axios.post(
+                'http://127.0.0.1:8000/accounts/profile/change-password/', 
+                {
+                    current_password: passwords.current_password,
+                    new_password: passwords.new_password
+                },
+                { headers: { 'Authorization': `Token ${token}` } }
+            );
+
+            alert(response.data.message);
+            setPasswords({ current_password: '', new_password: '', confirm_password: '' });
+        } catch (error: any) {
+            alert(error.response?.data?.error || "Failed to change password.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <section className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-6">
             <h3 className="font-bold text-slate-800">Change Password</h3>
-            <p className="text-xs text-slate-400">Update your password to keep your account secure.</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 max-w-md">
-          <input 
-            type="password" 
-            placeholder="Current Password" 
-            className="p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-            onChange={(e) => setPasswords({...passwords, current: e.target.value})}
-          />
-          <input 
-            type="password" 
-            placeholder="New Password" 
-            className="p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-            onChange={(e) => setPasswords({...passwords, next: e.target.value})}
-          />
-          <button 
-            onClick={handleUpdate}
-            className="w-full md:w-fit bg-slate-800 text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-900 transition-all active:scale-95"
-          >
-            Update Password
-          </button>
-        </div>
-      </div>
-
-      {/* 2FA Card */}
-      <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm hover:border-slate-200 transition-colors cursor-pointer group">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <ShieldCheck size={20} className="text-green-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-800">Two-Factor Authentication</h3>
-              <p className="text-xs text-slate-400">Add an extra layer of security to your account.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-full uppercase">
-              Disabled
-            </span>
-            <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-500 transition-all" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Password</label>
+                    <input 
+                        type="password" 
+                        className="w-full p-3 border border-slate-200 rounded-xl text-sm"
+                        value={passwords.current_password}
+                        onChange={(e) => setPasswords({...passwords, current_password: e.target.value})}
+                        required
+                    />
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">New Password</label>
+                    <input 
+                        type="password" 
+                        className="w-full p-3 border border-slate-200 rounded-xl text-sm"
+                        value={passwords.new_password}
+                        onChange={(e) => setPasswords({...passwords, new_password: e.target.value})}
+                        required
+                    />
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Confirm New Password</label>
+                    <input 
+                        type="password" 
+                        className="w-full p-3 border border-slate-200 rounded-xl text-sm"
+                        value={passwords.confirm_password}
+                        onChange={(e) => setPasswords({...passwords, confirm_password: e.target.value})}
+                        required
+                    />
+                </div>
+                <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="bg-[#E32636] text-white px-8 py-3 rounded-xl text-xs font-bold shadow-md hover:bg-[#C52230] disabled:opacity-50"
+                >
+                    {loading ? 'Updating...' : 'Update Password'}
+                </button>
+            </form>
+        </section>
+    );
 };
 
 export default AccountSecurity;

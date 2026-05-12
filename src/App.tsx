@@ -3,31 +3,30 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import axios from 'axios';
 import Navbar from './features/Navbar';
 import HeaderActions from './features/HeaderActions';
-import CurrentPatient from './features/CurrentPatient';
+import Dashboard from './features/Dashboard'; 
 import PatientDirectory from './features/PatientDirectory';
 import Appointments from './features/Appointments';
 import Settings from './features/Settings';
 import Login from './features/KKALogin'; 
+import Consultation from './features/Consultation'; 
 import "tailwindcss";
 
-// --- THE BOUNCER (Protected Route) ---
 const ProtectedRoute = ({ user, children }: { user: any; children: React.ReactNode }) => {
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>; 
 };
 
-// --- Dashboard Component ---
-// Now focused only on Header actions and the Current Patient card
-const Dashboard = ({ user, onSearch }: { 
+const DashboardWrapper = ({ user, onSearch, searchTerm }: { 
   user: any; 
-  onSearch: (val: string) => void 
+  onSearch: (val: string) => void;
+  searchTerm: string;
 }) => (
   <main className="max-w-6xl mx-auto px-6 space-y-8 mt-8">
     <HeaderActions 
       adminName={user?.adminId || user?.username || "Admin"} 
       onSearch={onSearch} 
     />
-    <CurrentPatient />
+    <Dashboard externalSearchTerm={searchTerm} /> 
   </main>
 );
 
@@ -75,9 +74,10 @@ function AppContent() {
           path="/dashboard" 
           element={
             <ProtectedRoute user={user}>
-              <Dashboard 
+              <DashboardWrapper 
                 user={user} 
                 onSearch={setSearchTerm} 
+                searchTerm={searchTerm}
               />
             </ProtectedRoute>
           } 
@@ -87,13 +87,18 @@ function AppContent() {
           path="/directory" 
           element={
             <ProtectedRoute user={user}>
-              {/* Pass the search term to the Directory so the table works */}
               <PatientDirectory searchTerm={searchTerm} />
             </ProtectedRoute>
           } 
         />
 
         <Route path="/appointments" element={<ProtectedRoute user={user}><Appointments /></ProtectedRoute>} />
+        
+        <Route 
+          path="/consultation/:id" 
+          element={<ProtectedRoute user={user}><Consultation /></ProtectedRoute>} 
+        />
+
         <Route path="/settings" element={<ProtectedRoute user={user}><Settings /></ProtectedRoute>} /> 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
