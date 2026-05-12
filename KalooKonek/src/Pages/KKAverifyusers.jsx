@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from '../supabaseClient';
 
 const NAV_ITEMS = ["DASHBOARD", "VERIFY USERS", "APPOINTMENTS", "ANNOUNCEMENTS", "LOGS"];
 
@@ -77,6 +78,10 @@ const NavLink = ({ label, active, onClick }) => (
   </button>
 );
 
+const getInitials = (firstName, lastName) => {
+  return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase();
+};
+
 const Avatar = ({ initials, color = "#888" }) => (
   <div style={{
     width: 34, height: 34, borderRadius: "50%",
@@ -123,18 +128,20 @@ const ViewOscaBtn = () => {
   );
 };
 
-const ActionBtn = ({ type }) => {
+const ActionBtn = ({ type, onClick, disabled }) => {
   const [hov, setHov] = useState(false);
   const isApprove = type === "approve";
   return (
     <button
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
+      onClick={onClick}
+      disabled={disabled}
       style={{
         width: 30, height: 30, border: `1px solid ${hov ? (isApprove ? "#22aa66" : "#cc2222") : "#ddd"}`,
         borderRadius: 6, background: hov ? (isApprove ? "#e8f7ef" : "#fff0f0") : "#fff",
-        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all 0.15s",
+        cursor: disabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.15s", opacity: disabled ? 0.5 : 1,
       }}>
       {isApprove ? (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={hov ? "#22aa66" : "#aaa"} strokeWidth="2.5">
@@ -142,8 +149,7 @@ const ActionBtn = ({ type }) => {
         </svg>
       ) : (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={hov ? "#cc2222" : "#aaa"} strokeWidth="2.5">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       )}
     </button>
@@ -151,28 +157,125 @@ const ActionBtn = ({ type }) => {
 };
 
 export default function VerifyUsers() {
-  const [activeNav, setActiveNav] = useState("VERIFY USERS");
-  const [darkMode, setDarkMode] = useState(false);
+  const [applicants, setApplicants] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
 
-  const applicants = [
-    { initials: "RG", color: "#888", name: "Russel Gallanosa", barangay: "Brgy. 171", date: "Oct 24, 2025", ago: "2 days ago" },
-    { initials: "NG", color: "#c0784a", name: "Neo Gariando", barangay: "Brgy. 172", date: "Oct 23, 2025", ago: "3 days ago" },
-  ];
+  // 1. Fetch data from Backend
+  const fetchApplicants = async () => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error("No active Supabase session.");
+        return;
+      }
+      const response = await fetch('http://localhost:8000/admin/registration-requests/', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Accept': 'application/json',
+        }
+      });
+
+      const rawText = await response.text();
+      console.log("📡 Status:", response.status);
+      console.log("📄 Raw response (first 300 chars):", rawText.substring(0, 300));
+
+      if (!response.ok) {
+        console.error("❌ Backend error:", response.status, rawText);
+        return;
+      }
+
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        console.error("❌ Django returned HTML instead of JSON. The URL is probably wrong, unauthenticated, or being redirected. Full response:", rawText);
+        return;
+      }
+
+      setApplicants(data.registration_requests || []);
+    } catch (error) {
+      console.error("Failed to fetch applicants:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchApplicants();
+  }, []);
+
+  // 2. Handle Approval Logic
+  const handleApprove = async (id) => {
+    if (!window.confirm("Approve this user and send Supabase invite?")) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`http://localhost:8000/admin/registration-requests/${id}/approve/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        }
+      });
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      const errorText = await response.text();
+      console.error("Non-JSON response (approve):", errorText);
+      alert("Server error: unexpected response. Check console for details.");
+      return;
+    }
+    const result = await response.json();
+    if (response.ok) {
+      alert(result.message);
+      fetchApplicants(); // Refresh the list automatically
+    } else {
+      alert(result.error || "Approval failed.");
+    }
+  } catch (err) {
+    console.error("Approval failed:", err);
+    alert("Network error during approval. Check console.");
+  }
+};
+
+  // 3. Handle Rejection Logic
+  const handleReject = async (id) => {
+    if (!window.confirm("Reject and delete this request?")) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`http://localhost:8000/admin/registration-requests/${id}/reject/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+        }
+      });
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok) {
+      const errorText = contentType.includes("application/json")
+        ? (await response.json()).error
+        : await response.text();
+      console.error("Rejection error:", errorText);
+      alert("Rejection failed. Check console for details.");
+      return;
+    }
+    fetchApplicants(); // Refresh the list
+  } catch (err) {
+    console.error("Rejection failed:", err);
+    alert("Network error during rejection. Check console.");
+  }
+};
 
   const filtered = applicants.filter(a =>
-    a.name.toLowerCase().includes(search.toLowerCase())
+    `${a.first_name} ${a.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
+    a.email.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
       <div style={{ ...styles.page, background: darkMode ? "#1a1a1a" : "#f4f5f7" }}>
-
-        {/* MAIN */}
         <main style={styles.main}>
-
-          {/* Header row */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <h1 style={{ fontSize: 22, fontWeight: 700, color: darkMode ? "#fff" : "#111", margin: "0 0 4px" }}>
@@ -182,156 +285,69 @@ export default function VerifyUsers() {
                 Review applicant credentials and approve platform access.
               </p>
             </div>
-
-            {/* Search + Filter */}
+            
+            {/* Search Input */}
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ position: "relative" }}>
-                <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }}
-                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5">
-                  <circle cx="11" cy="11" r="8"/>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search name or ID..."
-                  style={{
-                    padding: "8px 12px 8px 30px",
-                    border: "1px solid #e0e0e0", borderRadius: 8,
-                    fontSize: 13, outline: "none",
-                    background: darkMode ? "#2a2a2a" : "#fff",
-                    color: darkMode ? "#fff" : "#111",
-                    fontFamily: "'Outfit', sans-serif", width: 200,
-                  }}
-                  onFocus={e => e.target.style.borderColor = "#cc2222"}
-                  onBlur={e => e.target.style.borderColor = "#e0e0e0"}
-                />
-              </div>
-
-              {/* Filter icon button */}
-              <button style={{
-                width: 36, height: 36, border: "1px solid #e0e0e0",
-                borderRadius: 8, background: darkMode ? "#2a2a2a" : "#fff",
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2.5">
-                  <line x1="4" y1="6" x2="20" y2="6"/>
-                  <line x1="8" y1="12" x2="16" y2="12"/>
-                  <line x1="11" y1="18" x2="13" y2="18"/>
-                </svg>
-              </button>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search name or email..."
+                style={{
+                  padding: "8px 12px", border: "1px solid #e0e0e0", borderRadius: 8, fontSize: 13,
+                  background: darkMode ? "#2a2a2a" : "#fff", color: darkMode ? "#fff" : "#111",
+                }}
+              />
             </div>
           </div>
 
-          {/* Table */}
-          <div style={{ ...styles.tableWrap, borderColor: darkMode ? "#333" : "#ebebeb", background: darkMode ? "#1e1e1e" : "#fff" }}>
+          <div style={{ ...styles.tableWrap, background: darkMode ? "#1e1e1e" : "#fff" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: darkMode ? "#252525" : "#fafafa" }}>
                   <th style={styles.th}>Applicant Profile</th>
-                  <th style={styles.th}>Submitted ID</th>
+                  <th style={styles.th}>Role</th>
                   <th style={styles.th}>Applied Date</th>
-                  <th style={styles.th}>Status</th>
                   <th style={styles.th}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ ...styles.td, textAlign: "center", color: "#aaa", padding: 40 }}>
-                      No applicants found.
-                    </td>
-                  </tr>
+                {loading ? (
+                  <tr><td colSpan={4} style={{ textAlign: "center", padding: 40 }}>Loading...</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: "center", padding: 40 }}>No pending requests.</td></tr>
                 ) : (
-                  filtered.map((a, i) => (
-                    <tr key={i} style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${darkMode ? "#2a2a2a" : "#f5f5f5"}` : "none" }}>
-
-                      {/* Applicant */}
+                  filtered.map((user) => (
+                    <tr key={user.id} style={{ borderBottom: `1px solid ${darkMode ? "#2a2a2a" : "#f5f5f5"}` }}>
                       <td style={styles.td}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <Avatar initials={a.initials} color={a.color} />
+                          <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#888", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
+                            {getInitials(user.first_name, user.last_name)}
+                          </div>
                           <div>
-                            <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: darkMode ? "#fff" : "#111" }}>{a.name}</p>
-                            <p style={{ margin: 0, fontSize: 11, color: "#aaa", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2">
-                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                                <circle cx="12" cy="10" r="3"/>
-                              </svg>
-                              {a.barangay}
-                            </p>
+                            <p style={{ margin: 0, fontWeight: 600, color: darkMode ? "#fff" : "#111" }}>{user.first_name} {user.last_name}</p>
+                            <p style={{ margin: 0, fontSize: 11, color: "#aaa" }}>{user.email}</p>
                           </div>
                         </div>
                       </td>
-
-                      {/* OSCA ID */}
-                      <td style={styles.td}><ViewOscaBtn /></td>
-
-                      {/* Date */}
                       <td style={styles.td}>
-                        <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: darkMode ? "#ddd" : "#111" }}>{a.date}</p>
-                        <p style={{ margin: 0, fontSize: 11, color: "#aaa", marginTop: 2 }}>{a.ago}</p>
+                        <span style={{ textTransform: 'capitalize' }}>{user.role}</span>
                       </td>
-
-                      {/* Status */}
-                      <td style={styles.td}><PendingBadge /></td>
-
-                      {/* Actions */}
+                      <td style={styles.td}>
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
                       <td style={styles.td}>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <ActionBtn type="approve" />
-                          <ActionBtn type="reject" />
+                          <ActionBtn type="approve" onClick={() => handleApprove(user.id)} />
+                          <ActionBtn type="reject" onClick={() => handleReject(user.id)} />
                         </div>
                       </td>
-
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-
-            {/* Footer row */}
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "12px 16px", borderTop: `1px solid ${darkMode ? "#2a2a2a" : "#f0f0f0"}`,
-            }}>
-              <span style={{ fontSize: 12, color: "#aaa" }}>Showing 2 of 45 pending requests</span>
-              <div style={{ display: "flex", gap: 8 }}>
-                {["Previous", "Next"].map(label => (
-                  <button key={label} style={{
-                    padding: "6px 14px", border: "1px solid #ddd",
-                    borderRadius: 6, background: "#fff", fontSize: 12,
-                    fontWeight: 600, color: "#555", cursor: "pointer",
-                    fontFamily: "'Outfit', sans-serif",
-                  }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
-
-          <div style={{ height: 32 }} />
         </main>
-
-        {/* FOOTER */}
-        <footer style={{
-          borderTop: `1px solid ${darkMode ? "#333" : "#e8e8e8"}`,
-          background: darkMode ? "#1e1e1e" : "#fff",
-          padding: "14px 32px",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-        }}>
-          <span style={{ fontSize: 12, color: "#aaa" }}>© 2026 KalooKonek | Technological University of the Philippines</span>
-          <div style={{ display: "flex", gap: 20 }}>
-            {["PRIVACY", "TERMS", "SUPPORT"].map(l => (
-              <button key={l} style={{
-                background: "none", border: "none", fontSize: 11, fontWeight: 700,
-                color: "#aaa", cursor: "pointer", letterSpacing: "0.05em",
-                fontFamily: "'Outfit', sans-serif",
-              }}>{l}</button>
-            ))}
-          </div>
-        </footer>
-
       </div>
     </>
   );

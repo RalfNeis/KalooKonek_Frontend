@@ -162,6 +162,7 @@ const SignInPage = ({ onForgot, onRequest }) => {
       if (error) throw error;
 
       const token = data.session.access_token;
+      localStorage.setItem('token', token);
 
       // Step 2: Verify the user is an admin via Django
       // FIX: Use the correct admin-check endpoint, not /accounts/profile/
