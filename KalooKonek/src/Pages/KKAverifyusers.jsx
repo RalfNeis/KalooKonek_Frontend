@@ -162,40 +162,43 @@ export default function VerifyUsers() {
   const [search, setSearch] = useState("");
   const [darkMode, setDarkMode] = useState(false);
 
-  // 1. Fetch data from Backend
+  // 1. Fetch data directly from Supabase Backend
   const fetchApplicants = async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.error("No active Supabase session.");
-        return;
-      }
-      const response = await fetch('http://localhost:8000/admin/registration-requests/', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Accept': 'application/json',
-        }
-      });
+      // Fetch users and join their profile data, filtering for unapproved profiles
+      const { data, error } = await supabase
+        .from('auth_user')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          username,
+          date_joined,
+          is_superuser,
+          accounts_userprofile!inner(
+            is_approved,
+            barangay
+          )
+        `)
+        .eq('accounts_userprofile.is_approved', false);
 
-      const rawText = await response.text();
-      console.log("📡 Status:", response.status);
-      console.log("📄 Raw response (first 300 chars):", rawText.substring(0, 300));
-
-      if (!response.ok) {
-        console.error("❌ Backend error:", response.status, rawText);
-        return;
-      }
-
-      let data;
-      try {
-        data = JSON.parse(rawText);
-      } catch (e) {
-        console.error("❌ Django returned HTML instead of JSON. The URL is probably wrong, unauthenticated, or being redirected. Full response:", rawText);
+      if (error) {
+        console.error("❌ Supabase query error:", error.message);
         return;
       }
 
-      setApplicants(data.registration_requests || []);
+      // Flatten the data slightly so your existing JSX table doesn't break
+      const formattedData = data.map(user => ({
+        ...user,
+        // Supabase joins sometimes return arrays or objects depending on the schema
+        barangay: Array.isArray(user.accounts_userprofile) 
+          ? user.accounts_userprofile[0]?.barangay 
+          : user.accounts_userprofile?.barangay
+      }));
+
+      setApplicants(formattedData || []);
     } catch (error) {
       console.error("Failed to fetch applicants:", error);
     } finally {
@@ -207,64 +210,55 @@ export default function VerifyUsers() {
     fetchApplicants();
   }, []);
 
-  // 2. Handle Approval Logic
+  // 2. Handle Approval Logic via Supabase
   const handleApprove = async (id) => {
-    if (!window.confirm("Approve this user and send Supabase invite?")) return;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`http://localhost:8000/admin/registration-requests/${id}/approve/`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
-          'Content-Type': 'application/json',
-        }
-      });
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) {
-      const errorText = await response.text();
-      console.error("Non-JSON response (approve):", errorText);
-      alert("Server error: unexpected response. Check console for details.");
-      return;
-    }
-    const result = await response.json();
-    if (response.ok) {
-      alert(result.message);
-      fetchApplicants(); // Refresh the list automatically
-    } else {
-      alert(result.error || "Approval failed.");
-    }
-  } catch (err) {
-    console.error("Approval failed:", err);
-    alert("Network error during approval. Check console.");
-  }
-};
+    if (!window.confirm("Approve this user and grant platform access?")) return;
 
-  // 3. Handle Rejection Logic
-  const handleReject = async (id) => {
-    if (!window.confirm("Reject and delete this request?")) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`http://localhost:8000/admin/registration-requests/${id}/reject/`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
-        }
-      });
-    const contentType = response.headers.get("content-type") || "";
-    if (!response.ok) {
-      const errorText = contentType.includes("application/json")
-        ? (await response.json()).error
-        : await response.text();
-      console.error("Rejection error:", errorText);
-      alert("Rejection failed. Check console for details.");
-      return;
+      // Update the user's profile status using the foreign key (user_id)
+      const { error } = await supabase
+        .from('accounts_userprofile')
+        .update({ is_approved: true }) 
+        .eq('user_id', id);
+
+      if (error) {
+        console.error("❌ Approval error:", error.message);
+        alert("Approval failed: " + error.message);
+        return;
+      }
+
+      alert("User successfully approved!");
+      fetchApplicants(); // Automatically refresh the table data to remove them from the list
+    } catch (err) {
+      console.error("Approval failed:", err);
+      alert("Network error during approval. Check console.");
     }
-    fetchApplicants(); // Refresh the list
-  } catch (err) {
-    console.error("Rejection failed:", err);
-    alert("Network error during rejection. Check console.");
-  }
-};
+  };
+
+  // 3. Handle Rejection Logic via Supabase
+  const handleReject = async (id) => {
+    if (!window.confirm("Reject and delete this request entirely?")) return;
+
+    try {
+      // Delete the unapproved user from the database
+      const { error } = await supabase
+        .from('auth_user')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error("❌ Rejection error:", error.message);
+        alert("Rejection failed: " + error.message);
+        return;
+      }
+
+      alert("User request has been removed.");
+      fetchApplicants(); // Automatically refresh the table data
+    } catch (err) {
+      console.error("Rejection failed:", err);
+      alert("Network error during rejection. Check console.");
+    }
+  };
 
   const filtered = applicants.filter(a =>
     `${a.first_name} ${a.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
@@ -325,15 +319,22 @@ export default function VerifyUsers() {
                           </div>
                           <div>
                             <p style={{ margin: 0, fontWeight: 600, color: darkMode ? "#fff" : "#111" }}>{user.first_name} {user.last_name}</p>
-                            <p style={{ margin: 0, fontSize: 11, color: "#aaa" }}>{user.email}</p>
+                            {/* In auth_user, the email might be in the 'username' or 'email' column depending on your Django setup */}
+                            <p style={{ margin: 0, fontSize: 11, color: "#aaa" }}>{user.email || user.username}</p>
                           </div>
                         </div>
                       </td>
                       <td style={styles.td}>
-                        <span style={{ textTransform: 'capitalize' }}>{user.role}</span>
+                        {/* Fallback if role is missing, or check if they are a superuser */}
+                        <span style={{ textTransform: 'capitalize' }}>
+                          {user.is_superuser ? 'Admin' : (user.role || 'User')}
+                        </span>
                       </td>
                       <td style={styles.td}>
-                        {new Date(user.created_at).toLocaleDateString()}
+                        {/* Check for Django's date_joined, otherwise fallback gracefully */}
+                        {user.date_joined 
+                          ? new Date(user.date_joined).toLocaleDateString() 
+                          : 'Date Unknown'}
                       </td>
                       <td style={styles.td}>
                         <div style={{ display: "flex", gap: 6 }}>
