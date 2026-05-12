@@ -210,25 +210,39 @@ export default function VerifyUsers() {
     fetchApplicants();
   }, []);
 
-  // 2. Handle Approval Logic via Supabase
+  // 2. Handle Approval Logic via Django
   const handleApprove = async (id) => {
-    if (!window.confirm("Approve this user and grant platform access?")) return;
-
+    if (!window.confirm("Approve this user and send Supabase invite?")) return;
+    
     try {
-      // Update the user's profile status using the foreign key (user_id)
-      const { error } = await supabase
-        .from('accounts_userprofile')
-        .update({ is_approved: true }) 
-        .eq('user_id', id);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`http://localhost:8000/admin/registration-requests/${id}/approve/`, {
+        method: 'PUT', 
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}) // CRITICAL: Send an empty JSON body so Django doesn't crash while parsing
+      });
 
-      if (error) {
-        console.error("❌ Approval error:", error.message);
-        alert("Approval failed: " + error.message);
+      const contentType = response.headers.get("content-type") || "";
+      
+      if (!contentType.includes("application/json")) {
+        const errorText = await response.text();
+        console.error("Non-JSON response (approve):", errorText);
+        alert("Server error: unexpected response. Check console for details.");
         return;
       }
 
-      alert("User successfully approved!");
-      fetchApplicants(); // Automatically refresh the table data to remove them from the list
+      const result = await response.json();
+      
+      if (response.ok) {
+        alert(result.message || "User approved successfully!");
+        fetchApplicants(); // Refresh the list automatically
+      } else {
+        alert(result.error || "Approval failed.");
+      }
     } catch (err) {
       console.error("Approval failed:", err);
       alert("Network error during approval. Check console.");
