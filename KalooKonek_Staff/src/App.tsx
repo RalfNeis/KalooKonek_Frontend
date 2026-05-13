@@ -40,7 +40,8 @@ function AppContent() {
 
   useEffect(() => {
     if (user?.token) {
-      axios.defaults.headers.common['Authorization'] = `Token ${user.token}`;
+      // FIXED: Switched from 'Token' to 'Bearer' for Supabase integration
+      axios.defaults.headers.common['Authorization'] = `Bearer ${user.token}`;
     } else {
       delete axios.defaults.headers.common['Authorization'];
     }

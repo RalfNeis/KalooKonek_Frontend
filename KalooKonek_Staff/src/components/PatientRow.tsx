@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface PatientRowProps {
     id: string;
@@ -8,16 +9,18 @@ interface PatientRowProps {
     barangay: string;
     last_visit_date?: string;
     last_visit_type?: string;
-    medical_tags?: string[]; // To handle the "HYPERTENSION" tag
+    medical_tags?: string[];
 }
 
 const PatientRow: React.FC<PatientRowProps> = ({ 
     name, id, age, gender, barangay, last_visit_date, last_visit_type, medical_tags 
 }) => {
+    // FIXED: Added navigate so the button actually works
+    const navigate = useNavigate();
+
     return (
         <div className="grid grid-cols-5 px-6 py-5 items-center border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
             
-            {/* COLUMN 1: PATIENT NAME & ID */}
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-orange-100 shrink-0 flex items-center justify-center text-orange-600 font-bold text-xs">
                     {name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
@@ -35,26 +38,26 @@ const PatientRow: React.FC<PatientRowProps> = ({
                 </div>
             </div>
 
-            {/* COLUMN 2: AGE / GENDER */}
             <div className="flex flex-col">
                 <span className="text-[13px] font-bold text-gray-700">{age} yrs</span>
                 <span className="text-[11px] text-gray-400">{gender}</span>
             </div>
 
-            {/* COLUMN 3: BARANGAY */}
             <div className="text-[12px] text-gray-500 font-medium">
                 {barangay}
             </div>
 
-            {/* COLUMN 4: LAST VISIT */}
             <div className="flex flex-col">
                 <span className="text-[12px] text-gray-600 font-semibold">{last_visit_date || '---'}</span>
                 <span className="text-[10px] text-gray-400">{last_visit_type}</span>
             </div>
 
-            {/* COLUMN 5: ACTIONS */}
             <div className="flex justify-end">
-                <button className="bg-blue-50 text-blue-500 text-[10px] font-black px-4 py-2 rounded-lg hover:bg-blue-100 transition-all tracking-wider uppercase">
+                {/* FIXED: Wired the click event to route to the consultation page */}
+                <button 
+                    onClick={() => navigate(`/consultation/${id}`)}
+                    className="bg-blue-50 text-blue-500 text-[10px] font-black px-4 py-2 rounded-lg hover:bg-blue-100 transition-all tracking-wider uppercase cursor-pointer"
+                >
                     Open Record
                 </button>
             </div>

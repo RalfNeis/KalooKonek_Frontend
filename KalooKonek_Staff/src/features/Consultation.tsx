@@ -10,7 +10,6 @@ const Consultation: React.FC = () => {
     const [appointment, setAppointment] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     
-    // Fix: Using unique state variables for each box
     const [clinicalFindings, setClinicalFindings] = useState("");
     const [diagnosisPrescription, setDiagnosisPrescription] = useState("");
     const [saving, setSaving] = useState(false);
@@ -23,12 +22,13 @@ const Consultation: React.FC = () => {
                 const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
                 const token = sessionData.token;
 
+                // Watch this URL! If it 404s, change 'accounts' to 'mp'
                 const response = await axios.get(`http://127.0.0.1:8000/accounts/appointments/${id}/`, {
-                    headers: { 'Authorization': `Token ${token}` }
+                    // FIXED: Changed Token to Bearer for Supabase
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
                 setAppointment(response.data);
-                // Fix: Mapping the correct backend fields to state
                 setClinicalFindings(response.data.clinical_findings || "");
                 setDiagnosisPrescription(response.data.diagnosis_prescription || "");
             } catch (error) {
@@ -46,21 +46,22 @@ const Consultation: React.FC = () => {
             const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
             const token = sessionData.token;
 
-            // Fix: Sending keys that match your Django model exactly
+            // Watch this URL! If it 404s, change 'accounts' to 'mp'
             await axios.post(`http://127.0.0.1:8000/accounts/appointments/${id}/save/`, 
                 { 
                     clinical_findings: clinicalFindings, 
                     diagnosis_prescription: diagnosisPrescription,
                     status: "COMPLETED" 
                 }, 
-                { headers: { 'Authorization': `Token ${token}` } }
+                // FIXED: Changed Token to Bearer for Supabase
+                { headers: { 'Authorization': `Bearer ${token}` } }
             );
 
             alert("Consultation saved successfully!");
             navigate('/appointments'); 
         } catch (error) {
             console.error("Error saving consultation:", error);
-            alert("Failed to save. Check the backend fields for 'clinical_findings' and 'diagnosis_prescription'.");
+            alert("Failed to save. Check your terminal for a 404 or 500 error.");
         } finally {
             setSaving(false);
         }
@@ -74,7 +75,7 @@ const Consultation: React.FC = () => {
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full transition-all">
+                    <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full transition-all cursor-pointer">
                         <ArrowLeft size={20} className="text-slate-600" />
                     </button>
                     <div>
@@ -156,14 +157,14 @@ const Consultation: React.FC = () => {
                         <button 
                             onClick={handleSave}
                             disabled={saving}
-                            className={`w-full ${saving ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2`}
+                            className={`w-full ${saving ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer`}
                         >
                             <Save size={18} /> {saving ? 'Saving...' : 'Complete Consultation & Save'}
                         </button>
                     ) : (
                         <button 
                             onClick={() => navigate('/appointments')}
-                            className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition-all"
+                            className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition-all cursor-pointer"
                         >
                             Back to Schedule
                         </button>
@@ -174,15 +175,15 @@ const Consultation: React.FC = () => {
                 <div className="space-y-6">
                     <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl">
                         <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-1">Patient Profile</p>
-                        <h2 className="text-xl font-bold mb-4">{appointment.patient_name}</h2>
+                        <h2 className="text-xl font-bold mb-4">{appointment.patient_name || "Unknown Patient"}</h2>
                         <div className="space-y-3 border-t border-slate-800 pt-4">
                             <div className="flex justify-between">
                                 <span className="text-slate-400 text-xs">Patient ID</span>
-                                <span className="text-xs font-bold">{appointment.patient_id_display || "2026-062"}</span>
+                                <span className="text-xs font-bold">{appointment.patient_id_display || "N/A"}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400 text-xs">Status</span>
-                                <span className="text-xs font-bold uppercase">{appointment.status}</span>
+                                <span className="text-xs font-bold uppercase">{appointment.status || "Pending"}</span>
                             </div>
                         </div>
                     </div>
