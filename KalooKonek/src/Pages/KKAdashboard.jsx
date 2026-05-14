@@ -34,9 +34,6 @@ const StatCard = ({ count }) => (
         <p style={{ fontSize: 34, fontWeight: 700, color: "#111", margin: "0 0 8px" }}>
           {count?.toLocaleString() || 0}
         </p>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#22aa66", fontWeight: 600, background: "#e8f7ef", padding: "2px 8px", borderRadius: 99 }}>
-          ↑ 12% vs last month
-        </span>
       </div>
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e8e8e8" strokeWidth="1.5">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -219,12 +216,19 @@ const SystemEvents = () => {
           .from('logs')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(8); // Fetch the 8 most recent events
+          .limit(8);
 
-        if (error) throw error;
+        // FIX: Don't throw on error — gracefully show empty state
+        // if the logs table doesn't exist yet or RLS blocks access.
+        if (error) {
+          console.warn("Could not fetch logs:", error.message);
+          setLogs([]);
+          return;
+        }
         setLogs(data || []);
       } catch (err) {
         console.error("Failed to fetch mini logs:", err);
+        setLogs([]);
       } finally {
         setLoading(false);
       }
@@ -233,15 +237,13 @@ const SystemEvents = () => {
     fetchRecentLogs();
   }, []);
 
-  // Show 4 logs normally, or all 8 if expanded
   const displayLogs = expanded ? logs : logs.slice(0, 4);
 
-  // Helper to color-code the timestamp based on event type
   const getColor = (type) => {
-    if (type === 'AUTH_FAIL') return '#e85555'; // Red
-    if (type === 'UPDATE') return '#ffb74d';    // Orange
-    if (type === 'PUBLISH') return '#4facfe';   // Blue
-    return '#4caf82';                           // Green (Approve, System, etc.)
+    if (type === 'AUTH_FAIL') return '#e85555';
+    if (type === 'UPDATE') return '#ffb74d';
+    if (type === 'PUBLISH') return '#4facfe';
+    return '#4caf82';
   };
 
   return (
@@ -284,7 +286,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState(false);
   const [data, setData] = useState({
-    user: { full_name: "Admin" },
+    user: { full_name: "admin" },
     stats: { seniors: 0, pending: 0, appointments: 0 },
     applicants: []
   });
@@ -297,6 +299,22 @@ export default function AdminDashboard() {
         
         if (!session) {
           navigate('/login'); 
+          return;
+        }
+
+        // FIX 1: Check role BEFORE running any admin-only queries.
+        // This prevents 401/406 errors for non-admin users who land here.
+        const { data: profileData, error: profileError } = await supabase
+          .from('accounts_userprofile')
+          .select('role')
+          .eq('supabase_uid', session.user.id)
+          .single();
+
+        if (profileError || !profileData || profileData.role !== 'admin') {
+          // Not an admin — sign them out and redirect to login
+          console.warn("Access denied: user is not an admin.", profileData?.role);
+          await supabase.auth.signOut();
+          navigate('/login');
           return;
         }
 
@@ -346,7 +364,7 @@ export default function AdminDashboard() {
 
         // 6. Update the React State
         setData({
-          user: { full_name: adminData?.first_name || "Admin" },
+          user: { full_name: adminData?.first_name || "admin" },
           stats: { 
             seniors: seniorsCount || 0, 
             pending: pendingCount || 0, 
