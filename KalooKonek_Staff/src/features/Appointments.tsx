@@ -21,44 +21,63 @@ const Appointments: React.FC = () => {
     
     const tabs = ["Today's List", 'Upcoming', 'Past Records'];
 
+    // Helper to get headers (centralized to avoid repeating logic)
+    const getAuthHeader = () => {
+        const sessionData = localStorage.getItem('kka_admin_session');
+        if (sessionData) {
+            const { token } = JSON.parse(sessionData);
+            return { Authorization: `Bearer ${token}` };
+        }
+        return null;
+    };
+
     // --- RESCHEDULE HANDLER ---
     const handleReschedule = async (appointmentId: number) => {
         const newDate = prompt("Enter new date (YYYY-MM-DD):", "2026-05-13");
         const newTime = prompt("Enter new time (HH:MM):", "10:00");
 
         if (newDate && newTime) {
-            try {
-                const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
-                const token = sessionData.token;
+            const headers = getAuthHeader();
+            if (!headers) {
+                alert("Session expired. Please log in again.");
+                return;
+            }
 
-                await axios.post(`http://127.0.0.1:8000/accounts/appointments/${appointmentId}/reschedule/`, 
+            try {
+                // Ensure this URL matches your backend exactly
+                await axios.post(`http://127.0.0.1:8000/mp/appointments/${appointmentId}/reschedule/`, 
                     { date: newDate, time: newTime },
-                    { headers: { 'Authorization': `Token ${token}` } }
+                    { headers }
                 );
 
                 alert("Rescheduled successfully!");
-                // Refresh list
                 fetchAppointments(); 
             } catch (error) {
                 console.error("Reschedule error:", error);
-                alert("Failed to reschedule. Please check the date/time format.");
+                alert("Failed to reschedule. Please check format or permissions.");
             }
         }
     };
 
     const fetchAppointments = async () => {
+        const headers = getAuthHeader();
+        
+        if (!headers) {
+            console.error("No auth token found in localStorage");
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
-            const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
-            const token = sessionData.token;
-
-            const response = await axios.get('http://127.0.0.1:8000/accounts/appointments/', {
-                params: { tab: activeTab },
-                headers: { 'Authorization': `Token ${token}` }
-            });
-            setAppointments(response.data);
-        } catch (error) {
-            console.error("Error fetching appointments:", error);
+            // Updated URL to use /mp/ based on your backend setup
+            const res = await axios.get(`http://127.0.0.1:8000/mp/appointments/?tab=${activeTab}`, { headers });
+            setAppointments(res.data);
+        } catch (err: any) {
+            console.error("Error fetching appointments:", err);
+            if (err.response?.status === 401) {
+                console.error("Unauthorized: Token might be invalid or expired.");
+            }
         } finally {
             setLoading(false);
         }
@@ -142,31 +161,24 @@ const Appointments: React.FC = () => {
                             </div>
 
                             <div className="flex gap-3">
-                                {appt.status === 'CURRENT' ? (
+                                <button 
+                                    onClick={() => navigate(`/consultation/${appt.id}`)}
+                                    className={`${
+                                        appt.status === 'CURRENT' 
+                                        ? 'bg-[#E32636] text-white hover:bg-[#C52230]' 
+                                        : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    } px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-sm`}
+                                >
+                                    {appt.status === 'CURRENT' ? 'Enter Medical Notes' : 'View History'}
+                                </button>
+                                
+                                {appt.status !== 'COMPLETED' && appt.status !== 'CURRENT' && (
                                     <button 
-                                        onClick={() => navigate(`/consultation/${appt.id}`)}
-                                        className="bg-[#E32636] text-white px-6 py-3 rounded-xl text-xs font-bold shadow-md hover:bg-[#C52230] transition-all"
+                                        onClick={() => handleReschedule(appt.id)}
+                                        className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
                                     >
-                                        Enter Medical Notes
+                                        Reschedule
                                     </button>
-                                ) : (
-                                    <>
-                                        <button 
-                                            onClick={() => navigate(`/consultation/${appt.id}`)}
-                                            className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
-                                        >
-                                            View History
-                                        </button>
-                                        
-                                        {appt.status !== 'COMPLETED' && (
-                                            <button 
-                                                onClick={() => handleReschedule(appt.id)}
-                                                className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
-                                            >
-                                                Reschedule
-                                            </button>
-                                        )}
-                                    </>
                                 )}
                             </div>
                         </div>

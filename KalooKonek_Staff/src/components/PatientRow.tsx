@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 interface PatientRowProps {
     id: string;
+    numeric_id: number;  // ← added
     name: string;
     age: number;
     gender: string;
@@ -13,9 +14,8 @@ interface PatientRowProps {
 }
 
 const PatientRow: React.FC<PatientRowProps> = ({ 
-    name, id, age, gender, barangay, last_visit_date, last_visit_type, medical_tags 
+    name, id, numeric_id, age, gender, barangay, last_visit_date, last_visit_type, medical_tags  // ← added numeric_id
 }) => {
-    // FIXED: Added navigate so the button actually works
     const navigate = useNavigate();
 
     return (
@@ -53,9 +53,8 @@ const PatientRow: React.FC<PatientRowProps> = ({
             </div>
 
             <div className="flex justify-end">
-                {/* FIXED: Wired the click event to route to the consultation page */}
                 <button 
-                    onClick={() => navigate(`/consultation/${id}`)}
+                    onClick={() => navigate(`/consultation/${numeric_id}`)}  // ← changed from id
                     className="bg-blue-50 text-blue-500 text-[10px] font-black px-4 py-2 rounded-lg hover:bg-blue-100 transition-all tracking-wider uppercase cursor-pointer"
                 >
                     Open Record

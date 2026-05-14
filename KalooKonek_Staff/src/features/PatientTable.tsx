@@ -113,6 +113,7 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                             <PatientRow 
                                 key={patient.id} 
                                 id={patient.display_id || patient.id} 
+                                numeric_id={patient.id}
                                 name={`${patient.first_name} ${patient.last_name}`} 
                                 age={patient.age}
                                 gender={patient.gender}
