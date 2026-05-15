@@ -129,25 +129,28 @@ export default function VerifyUsers() {
   };
 
   const readJsonResponse = async (response, actionName) => {
-    const text = await response.text();
+  const text = await response.text();
 
-    console.log(`${actionName} response status:`, response.status);
-    console.log(`${actionName} raw response:`, text);
+  console.log(`${actionName} status:`, response.status);
+  console.log(`${actionName} content-type:`, response.headers.get("content-type"));
+  console.log(`${actionName} raw response:`, text);
 
-    let data = {};
+  let data = {};
 
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      throw new Error(`Backend returned non-JSON during ${actionName}.`);
-    }
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      `Backend returned non-JSON during ${actionName}. Status: ${response.status}. Check console raw response.`
+    );
+  }
 
-    if (!response.ok) {
-      throw new Error(data.error || `${actionName} failed with status ${response.status}.`);
-    }
+  if (!response.ok) {
+    throw new Error(data.error || `${actionName} failed with status ${response.status}.`);
+  }
 
-    return data;
-  };
+  return data;
+};
 
   const fetchApplicants = async () => {
     console.log("✅ fetchApplicants started");

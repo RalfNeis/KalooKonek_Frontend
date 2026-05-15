@@ -103,24 +103,28 @@ export default function AccountManagement() {
   };
 
   const readJsonResponse = async (response, actionName) => {
-    const text = await response.text();
+  const text = await response.text();
 
-    console.log(`${actionName} status:`, response.status);
-    console.log(`${actionName} response:`, text);
+  console.log(`${actionName} status:`, response.status);
+  console.log(`${actionName} content-type:`, response.headers.get("content-type"));
+  console.log(`${actionName} raw response:`, text);
 
-    let data = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      throw new Error(`Backend returned non-JSON during ${actionName}.`);
-    }
+  let data = {};
 
-    if (!response.ok) {
-      throw new Error(data.error || `${actionName} failed with status ${response.status}.`);
-    }
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      `Backend returned non-JSON during ${actionName}. Status: ${response.status}. Check console raw response.`
+    );
+  }
 
-    return data;
-  };
+  if (!response.ok) {
+    throw new Error(data.error || `${actionName} failed with status ${response.status}.`);
+  }
+
+  return data;
+};
 
   const fetchAccounts = async () => {
     setLoading(true);
@@ -162,33 +166,37 @@ export default function AccountManagement() {
   }, []);
 
   const updateAccount = async (account, updates) => {
-    setSavingId(account.display_id);
-    setErrorMessage("");
-    setSuccessMessage("");
+  setSavingId(account.display_id);
+  setErrorMessage("");
+  setSuccessMessage("");
 
-    try {
-      const headers = await getAuthHeaders();
+  try {
+    const headers = await getAuthHeaders();
 
-      const response = await fetch(`${SYSAD_API_URL}/users/${account.display_id}/`, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({
-          role: updates.role ?? account.role,
-          is_active: updates.is_active ?? account.is_active,
-        }),
-      });
+    const response = await fetch(`${SYSAD_API_URL}/staff-accounts/`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        display_id: account.display_id,
+        first_name: updates.first_name ?? account.first_name,
+        last_name: updates.last_name ?? account.last_name,
+        email: updates.email ?? account.email,
+        role: updates.role ?? account.role,
+        is_active: updates.is_active ?? account.is_active,
+      }),
+    });
 
-      const data = await readJsonResponse(response, "Update account");
+    const data = await readJsonResponse(response, "Update account");
 
-      setSuccessMessage(data.message || "Account updated successfully.");
-      await fetchAccounts();
-    } catch (error) {
-      console.error("Update account failed:", error);
-      setErrorMessage(error.message || "Failed to update account.");
-    } finally {
-      setSavingId("");
-    }
-  };
+    setSuccessMessage(data.message || "Account updated successfully.");
+    await fetchAccounts();
+  } catch (error) {
+    console.error("Update account failed:", error);
+    setErrorMessage(error.message || "Failed to update account.");
+  } finally {
+    setSavingId("");
+  }
+};
 
   const handleRoleChange = async (account, newRole) => {
     if (account.role === newRole) return;
@@ -203,16 +211,16 @@ export default function AccountManagement() {
   };
 
   const handleToggleActive = async (account) => {
-    const newStatus = !account.is_active;
+  const newStatus = !account.is_active;
 
-    const confirmChange = window.confirm(
-      `${newStatus ? "Activate" : "Deactivate"} ${account.name}'s account?`
-    );
+  const confirmChange = window.confirm(
+    `${newStatus ? "Activate" : "Deactivate"} ${account.email}?`
+  );
 
-    if (!confirmChange) return;
+  if (!confirmChange) return;
 
-    await updateAccount(account, { is_active: newStatus });
-  };
+  await updateAccount(account, { is_active: newStatus });
+};
 
   const filteredAccounts = accounts.filter((account) => {
     const matchesSearch =

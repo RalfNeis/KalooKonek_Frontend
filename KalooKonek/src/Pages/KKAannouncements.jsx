@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
 const SYSAD_API_URL = `${API_BASE_URL}/sysad`;
 
 export default function Announcements() {
@@ -11,6 +13,9 @@ export default function Announcements() {
   const [content, setContent] = useState("");
   const [smsAlert, setSmsAlert] = useState(false);
   const [publishHov, setPublishHov] = useState(false);
+
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [priorityFilter, setPriorityFilter] = useState("All");
 
   const [liveFeed, setLiveFeed] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,14 +42,17 @@ export default function Announcements() {
     const text = await response.text();
 
     console.log(`${actionName} status:`, response.status);
-    console.log(`${actionName} response:`, text);
+    console.log(`${actionName} content-type:`, response.headers.get("content-type"));
+    console.log(`${actionName} raw response:`, text);
 
     let data = {};
 
     try {
       data = text ? JSON.parse(text) : {};
     } catch {
-      throw new Error(`Backend returned non-JSON during ${actionName}.`);
+      throw new Error(
+        `Backend returned non-JSON during ${actionName}. Status: ${response.status}. Check console raw response.`
+      );
     }
 
     if (!response.ok) {
@@ -72,6 +80,8 @@ export default function Announcements() {
         id: item.id,
         title: item.title || "",
         body: item.body || "",
+        category: item.category || "General",
+        priority: item.priority || "Standard Information",
         author: item.author || "Unknown",
         is_published: item.is_published,
         created_at: item.created_at || item.published_at,
@@ -109,6 +119,8 @@ export default function Announcements() {
         body: JSON.stringify({
           title: headline.trim(),
           body: content.trim(),
+          category,
+          priority,
           is_published: true,
         }),
       });
@@ -133,21 +145,87 @@ export default function Announcements() {
     }
   };
 
+const handleDelete = async (id) => {
+  const confirmDelete = window.confirm(
+    "Are you sure you want to delete this announcement?"
+  );
+
+  if (!confirmDelete) return;
+
+  setErrorMessage("");
+
+  try {
+    const headers = await getAuthHeaders();
+
+    const response = await fetch(`${SYSAD_API_URL}/announcements/${id}/`, {
+      method: "DELETE",
+      headers,
+    });
+
+    const result = await readJsonResponse(response, "Delete announcement");
+
+    alert(result.message || "Announcement deleted successfully!");
+    fetchAnnouncements();
+  } catch (error) {
+    console.error("Error deleting announcement:", error);
+    alert(error.message || "Failed to delete announcement.");
+    setErrorMessage(error.message);
+  }
+};
+
   const getTagStyle = (priorityStr, categoryStr) => {
     if (priorityStr === "Urgent") {
-      return { color: "#cc2222", bg: "#fff0f0", border: "#cc2222", label: "URGENT" };
+      return {
+        color: "#cc2222",
+        bg: "#fff0f0",
+        border: "#cc2222",
+        label: "URGENT",
+      };
     }
 
     if (priorityStr === "High Priority") {
-      return { color: "#b07d00", bg: "#fff8ec", border: "#f5c842", label: "HIGH PRIORITY" };
+      return {
+        color: "#b07d00",
+        bg: "#fff8ec",
+        border: "#f5c842",
+        label: "HIGH PRIORITY",
+      };
     }
 
     if (categoryStr === "Health & Wellness") {
-      return { color: "#22aa66", bg: "#e8f7ef", border: "#22aa66", label: "HEALTH" };
+      return {
+        color: "#22aa66",
+        bg: "#e8f7ef",
+        border: "#22aa66",
+        label: "HEALTH",
+      };
     }
 
     if (categoryStr === "Pension Update") {
-      return { color: "#1a56db", bg: "#eff6ff", border: "#1a56db", label: "PENSION" };
+      return {
+        color: "#1a56db",
+        bg: "#eff6ff",
+        border: "#1a56db",
+        label: "PENSION",
+      };
+    }
+
+    if (categoryStr === "Events") {
+      return {
+        color: "#7c3aed",
+        bg: "#f3e8ff",
+        border: "#7c3aed",
+        label: "EVENTS",
+      };
+    }
+
+    if (categoryStr === "Emergency") {
+      return {
+        color: "#cc2222",
+        bg: "#fff0f0",
+        border: "#cc2222",
+        label: "EMERGENCY",
+      };
     }
 
     return {
@@ -170,6 +248,16 @@ export default function Announcements() {
       minute: "2-digit",
     });
   };
+
+  const filteredFeed = liveFeed.filter((item) => {
+    const matchesCategory =
+      categoryFilter === "All" || item.category === categoryFilter;
+
+    const matchesPriority =
+      priorityFilter === "All" || item.priority === priorityFilter;
+
+    return matchesCategory && matchesPriority;
+  });
 
   return (
     <>
@@ -240,7 +328,13 @@ export default function Announcements() {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 320px",
+              gap: 24,
+            }}
+          >
             <div
               style={{
                 background: "#fff",
@@ -275,70 +369,24 @@ export default function Announcements() {
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    color: "#aaa",
-                    marginBottom: 6,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Headline
-                </label>
+                <label style={labelStyle}>Headline</label>
 
                 <input
                   value={headline}
                   onChange={(e) => setHeadline(e.target.value)}
                   placeholder="Enter an eye-catching title..."
-                  style={{
-                    width: "100%",
-                    padding: "10px 14px",
-                    border: "1.5px solid #e8e8e8",
-                    borderRadius: 8,
-                    fontSize: 13,
-                    outline: "none",
-                    background: "#fafafa",
-                    fontFamily: "'Outfit', sans-serif",
-                    boxSizing: "border-box",
-                    color: "#111",
-                  }}
+                  style={inputStyle}
                 />
               </div>
 
               <div style={{ display: "flex", gap: 14, marginBottom: 18 }}>
                 <div style={{ flex: 1 }}>
-                  <label
-                    style={{
-                      display: "block",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: "0.1em",
-                      color: "#aaa",
-                      marginBottom: 6,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Topic Category
-                  </label>
+                  <label style={labelStyle}>Topic Category</label>
 
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px 14px",
-                      border: "1.5px solid #e8e8e8",
-                      borderRadius: 8,
-                      fontSize: 13,
-                      outline: "none",
-                      background: "#fafafa",
-                      fontFamily: "'Outfit', sans-serif",
-                      boxSizing: "border-box",
-                      color: "#333",
-                    }}
+                    style={inputStyle}
                   >
                     <option>Health & Wellness</option>
                     <option>Pension Update</option>
@@ -349,35 +397,12 @@ export default function Announcements() {
                 </div>
 
                 <div style={{ flex: 1 }}>
-                  <label
-                    style={{
-                      display: "block",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      letterSpacing: "0.1em",
-                      color: "#aaa",
-                      marginBottom: 6,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Priority Status
-                  </label>
+                  <label style={labelStyle}>Priority Status</label>
 
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px 14px",
-                      border: "1.5px solid #e8e8e8",
-                      borderRadius: 8,
-                      fontSize: 13,
-                      outline: "none",
-                      background: "#fafafa",
-                      fontFamily: "'Outfit', sans-serif",
-                      boxSizing: "border-box",
-                      color: "#333",
-                    }}
+                    style={inputStyle}
                   >
                     <option>Standard Information</option>
                     <option>Urgent</option>
@@ -387,19 +412,7 @@ export default function Announcements() {
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    color: "#aaa",
-                    marginBottom: 6,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Detailed Content
-                </label>
+                <label style={labelStyle}>Detailed Content</label>
 
                 <textarea
                   value={content}
@@ -407,17 +420,9 @@ export default function Announcements() {
                   placeholder="Type the full announcement details here..."
                   rows={7}
                   style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    border: "1.5px solid #e8e8e8",
-                    borderRadius: 8,
-                    fontSize: 13,
-                    outline: "none",
-                    background: "#fafafa",
-                    fontFamily: "'Outfit', sans-serif",
-                    boxSizing: "border-box",
-                    color: "#111",
+                    ...inputStyle,
                     resize: "vertical",
+                    lineHeight: 1.5,
                   }}
                 />
               </div>
@@ -450,14 +455,28 @@ export default function Announcements() {
                   }}
                 >
                   {smsAlert && (
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="3"
+                    >
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   )}
                 </div>
 
                 <div>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#333" }}>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#333",
+                    }}
+                  >
                     Push as SMS Alert
                   </p>
                   <p style={{ margin: 0, fontSize: 11, color: "#aaa" }}>
@@ -492,7 +511,14 @@ export default function Announcements() {
                     fontFamily: "'Outfit', sans-serif",
                   }}
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2.5"
+                  >
                     <line x1="22" y1="2" x2="11" y2="13" />
                     <polygon points="22 2 15 22 11 13 2 9 22 2" />
                   </svg>
@@ -516,14 +542,47 @@ export default function Announcements() {
                 Live Feed
               </p>
 
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  style={filterSelectStyle}
+                >
+                  <option>All</option>
+                  <option>Health & Wellness</option>
+                  <option>Pension Update</option>
+                  <option>Events</option>
+                  <option>Emergency</option>
+                  <option>General</option>
+                </select>
+
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  style={filterSelectStyle}
+                >
+                  <option>All</option>
+                  <option>Standard Information</option>
+                  <option>Urgent</option>
+                  <option>High Priority</option>
+                </select>
+              </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {loading ? (
-                  <p style={{ fontSize: 13, color: "#aaa", textAlign: "center", marginTop: 20 }}>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      color: "#aaa",
+                      textAlign: "center",
+                      marginTop: 20,
+                    }}
+                  >
                     Loading feed...
                   </p>
-                ) : liveFeed.length > 0 ? (
-                  liveFeed.map((item) => {
-                    const tagStyle = getTagStyle(priority, category);
+                ) : filteredFeed.length > 0 ? (
+                  filteredFeed.map((item) => {
+                    const tagStyle = getTagStyle(item.priority, item.category);
 
                     return (
                       <div
@@ -588,7 +647,7 @@ export default function Announcements() {
 
                         <p
                           style={{
-                            margin: "0 0 10px",
+                            margin: "0 0 8px",
                             fontSize: 12,
                             color: "#777",
                             lineHeight: 1.5,
@@ -599,21 +658,67 @@ export default function Announcements() {
 
                         <p
                           style={{
-                            margin: 0,
+                            margin: "0 0 4px",
                             fontSize: 10,
                             fontWeight: 700,
                             letterSpacing: "0.08em",
                             color: "#aaa",
                           }}
                         >
-                          BY {item.author || "ADMIN"}
+                          CATEGORY: {item.category} · PRIORITY: {item.priority}
                         </p>
+
+                        <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  }}
+>
+  <p
+    style={{
+      margin: 0,
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: "0.08em",
+      color: "#aaa",
+    }}
+  >
+    BY {item.author || "ADMIN"}
+  </p>
+
+  <button
+    onClick={() => handleDelete(item.id)}
+    style={{
+      background: "#fff0f0",
+      border: "1px solid #cc2222",
+      color: "#cc2222",
+      borderRadius: 6,
+      padding: "5px 9px",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: "pointer",
+      fontFamily: "'Outfit', sans-serif",
+    }}
+  >
+    Delete
+  </button>
+</div>
                       </div>
                     );
                   })
                 ) : (
-                  <p style={{ fontSize: 13, color: "#aaa", textAlign: "center", marginTop: 20 }}>
-                    No announcements published yet.
+                  <p
+                    style={{
+                      fontSize: 13,
+                      color: "#aaa",
+                      textAlign: "center",
+                      marginTop: 20,
+                    }}
+                  >
+                    No announcements match the selected filters.
                   </p>
                 )}
               </div>
@@ -661,3 +766,37 @@ export default function Announcements() {
     </>
   );
 }
+
+const labelStyle = {
+  display: "block",
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: "0.1em",
+  color: "#aaa",
+  marginBottom: 6,
+  textTransform: "uppercase",
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "10px 14px",
+  border: "1.5px solid #e8e8e8",
+  borderRadius: 8,
+  fontSize: 13,
+  outline: "none",
+  background: "#fafafa",
+  fontFamily: "'Outfit', sans-serif",
+  boxSizing: "border-box",
+  color: "#111",
+};
+
+const filterSelectStyle = {
+  flex: 1,
+  padding: "8px 10px",
+  border: "1px solid #ddd",
+  borderRadius: 8,
+  fontSize: 12,
+  fontFamily: "'Outfit', sans-serif",
+  background: "#fff",
+  color: "#333",
+};
