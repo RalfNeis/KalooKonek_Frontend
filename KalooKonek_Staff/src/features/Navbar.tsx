@@ -5,10 +5,11 @@ import { LogOut } from 'lucide-react';
 // 1. Define strict props to fix the IntrinsicAttributes error from Screenshot (3420).jpg
 interface NavbarProps {
   adminName?: string; // Optional: will default to "Admin" if not provided
+  profilePicture?: string;
   onLogout: () => void; // Required: must be passed from App.tsx
 }
 
-const Navbar: React.FC<NavbarProps> = ({ adminName, onLogout }) => {
+const Navbar: React.FC<NavbarProps> = ({ adminName, profilePicture, onLogout }) => {
   const getLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
       ? "text-blue-600 border-b-2 border-blue-600 pb-1"
@@ -45,10 +46,18 @@ const Navbar: React.FC<NavbarProps> = ({ adminName, onLogout }) => {
         <div className="flex items-center gap-2 border-l pl-6 border-gray-100">
           <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center border border-white shadow-sm overflow-hidden">
             {/* Dynamic Avatar based on adminName */}
-            <img 
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`} 
-              alt="Admin Profile" 
-            />
+            {profilePicture ? (
+              <img 
+                src={profilePicture} 
+                alt="Admin Profile" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <img 
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`} 
+                alt="Admin Profile" 
+              />
+            )}
           </div>
           {/* Displays the actual admin name passed from App.tsx */}
           <span className="text-xs font-bold text-slate-700">{avatarSeed}</span>

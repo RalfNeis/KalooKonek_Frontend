@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, ArrowLeft, Pill, Activity, CheckCircle, Thermometer, Heart, Wind, Gauge } from 'lucide-react';
+import { Save, ArrowLeft, Pill, Activity, CheckCircle, Thermometer, Heart, Gauge } from 'lucide-react';
 import axios from 'axios';
 
 const Consultation: React.FC = () => {
@@ -13,7 +13,7 @@ const Consultation: React.FC = () => {
 
     const [vitals, setVitals] = useState({
         blood_pressure: '', temperature: '', weight: '',
-        height: '', heart_rate: '', respiratory_rate: '', spo2: ''
+        height: '', heart_rate: '', spo2: ''
     });
     const [diagnosis, setDiagnosis] = useState('');
     const [treatment, setTreatment] = useState('');
@@ -38,7 +38,6 @@ const Consultation: React.FC = () => {
                     weight: d.weight || '',
                     height: d.height || '',
                     heart_rate: d.heart_rate || '',
-                    respiratory_rate: d.respiratory_rate || '',
                     spo2: d.spo2 || '',
                 });
                 setDiagnosis(d.diagnosis || '');
@@ -105,7 +104,6 @@ const Consultation: React.FC = () => {
                     { label: 'BP', key: 'blood_pressure', unit: 'mmHg', icon: <Gauge size={14} className="text-blue-500"/> },
                     { label: 'Temp', key: 'temperature', unit: '°C', icon: <Thermometer size={14} className="text-orange-500"/> },
                     { label: 'HR', key: 'heart_rate', unit: 'bpm', icon: <Heart size={14} className="text-red-500"/> },
-                    { label: 'RR', key: 'respiratory_rate', unit: 'bpm', icon: <Wind size={14} className="text-green-500"/> },
                     { label: 'SpO2', key: 'spo2', unit: '%', icon: <Activity size={14} className="text-cyan-500"/> },
                     { label: 'Wt', key: 'weight', unit: 'kg' },
                     { label: 'Ht', key: 'height', unit: 'cm' },
@@ -211,7 +209,7 @@ const Consultation: React.FC = () => {
                 {/* Patient Sidebar */}
                 <div className="space-y-4">
                     <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl">
-                        <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-1">Patient Profile</p>
+                        <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-1">Patient Record</p>
                         <h2 className="text-xl font-bold mb-4">{appointment.patient_name}</h2>
                         <div className="space-y-3 border-t border-slate-800 pt-4 text-xs">
                             {[

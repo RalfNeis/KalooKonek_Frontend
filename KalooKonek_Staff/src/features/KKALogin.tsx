@@ -1,8 +1,9 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from '../supabaseClient';
 
-// 1. Define the possible pages
+// --- Types & Constants ---
+
 const PAGES = {
   SIGNIN: "signin",
   FORGOT: "forgot",
@@ -11,11 +12,25 @@ const PAGES = {
 
 type PageType = typeof PAGES[keyof typeof PAGES];
 
-// --- Sub-Components (Styled for KalooKonek Medical Staff) ---
+interface DjangoProfileResponse {
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  role: string;
+  error?: string;
+}
 
-const LeftPanel = ({ title, subtitle, description }: any) => (
+interface SessionData extends DjangoProfileResponse {
+  token: string;
+  adminId: string;
+  username: string;
+}
+
+// --- Sub-Components ---
+
+const LeftPanel = ({ title, subtitle, description }: { title: string; subtitle?: string; description: string }) => (
   <div style={{
-    background: "linear-gradient(135deg, #0a151a 0%, #15252d 30%, #1a2b40 70%, #0d1a30 100%)", // Shifted to a more clinical blue/slate theme
+    background: "linear-gradient(135deg, #0a151a 0%, #15252d 30%, #1a2b40 70%, #0d1a30 100%)",
     position: "relative", overflow: "hidden", display: "flex", flexDirection: "column",
     justifyContent: "space-between", padding: "40px", color: "white", width: "42%",
     minWidth: "420px", minHeight: "100vh", flexShrink: 0, boxSizing: "border-box",
@@ -73,64 +88,90 @@ const PrimaryButton = ({ children, onClick, type = "button", disabled }: any) =>
 
 // --- Main Page Logic ---
 
-export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) {
+export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: SessionData) => void }) {
   const [page, setPage] = useState<PageType>(PAGES.SIGNIN);
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!id || !pw) return alert("Please fill in all fields.");
+    
     setLoading(true);
 
     try {
-        // 1. Authenticate directly with Supabase
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: id, // Note: Supabase requires an EMAIL, not a username like 'admin_ralf'
-            password: pw,
+      // 1. Authenticate with Supabase
+      const { data: sbData, error: sbError } = await supabase.auth.signInWithPassword({
+        email: id, 
+        password: pw,
+      });
+
+      if (sbError) throw sbError;
+
+      if (sbData.session) {
+        // 2. Sync with Django Backend
+        // Note: Using POST as per your requirement to send credentials
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/accounts/login/`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            // ❌ Remove this line — login endpoint is AllowAny, 
+            // and sending a Supabase JWT confuses DRF's TokenAuthentication
+            // 'Authorization': `Bearer ${sbData.session.access_token}`
+          },
+          body: JSON.stringify({ 
+            username: id, 
+            password: pw 
+          })
         });
 
-        if (error) throw error;
+        const djangoData: DjangoProfileResponse = await response.json();
 
-        // 2. Extract the JWT
-        if (data.session) {
-            const tokenValue = data.session.access_token;
-            
-            const sessionData = {
-                token: tokenValue, 
-                adminId: id,
-                ...data.user
-            };
+        if (response.ok) {
+          // 3. Construct Session
+          const sessionData: SessionData = {
+            token: sbData.session.access_token, 
+            adminId: id,
+            username: id,
+            first_name: djangoData.first_name,
+            last_name: djangoData.last_name,
+            full_name: djangoData.full_name, 
+            role: djangoData.role,
+          };
 
-            // 3. Save it to local storage exactly as before
-            localStorage.removeItem("kka_admin_session");
-            localStorage.setItem("kka_admin_session", JSON.stringify(sessionData));
-            
-            if (onLoginSuccess) onLoginSuccess(sessionData); 
-            navigate("/dashboard"); 
+          // 4. Save and Navigate
+          localStorage.setItem("kka_admin_session", JSON.stringify(sessionData));
+          
+          onLoginSuccess(sessionData); 
+          navigate("/dashboard"); 
+        } else {
+          throw new Error(djangoData.error || "Django synchronization failed.");
         }
+      }
     } catch (error: any) {
-        console.error("Supabase login failed:", error);
-        alert(error.message || "Invalid Email or Password.");
+      console.error("Login sequence failed:", error);
+      alert(error.message || "Invalid Email or Password.");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
+  };
 
   const leftPanelProps = {
     [PAGES.SIGNIN]: { 
-        title: "Medical Staff", 
-        subtitle: "Access Portal", 
-        description: "Secure access for healthcare personnel to manage senior citizen health records and appointments across Caloocan City." 
+      title: "Medical Staff", 
+      subtitle: "Access Portal", 
+      description: "Secure access for healthcare personnel to manage senior citizen health records and appointments across Caloocan City." 
     },
     [PAGES.FORGOT]: { 
-        title: "Recovery", 
-        description: "Securely reset your staff credentials to regain access to patient records." 
+      title: "Recovery", 
+      description: "Securely reset your staff credentials to regain access to patient records." 
     },
     [PAGES.REQUEST]: { 
-        title: "Access", 
-        subtitle: "System", 
-        description: "Submit your credentials for verification to the City Health Department." 
+      title: "Access", 
+      subtitle: "System", 
+      description: "Submit your credentials for verification to the City Health Department." 
     },
   };
 
@@ -148,9 +189,9 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
               <BadgePill text="MEDICAL STAFF ONLY" />
               <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20 }}>Staff Sign In</h2>
               <InputField 
-                label="Staff ID" 
+                label="Staff Email" 
                 id="staffId" 
-                placeholder="MED-2025-001" 
+                placeholder="staff@example.com" 
                 value={id} 
                 onChange={(e: any) => setId(e.target.value)} 
                 disabled={loading}
@@ -200,7 +241,6 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
               </button>
             </div>
           )}
-
         </div>
       </div>
     </div>
