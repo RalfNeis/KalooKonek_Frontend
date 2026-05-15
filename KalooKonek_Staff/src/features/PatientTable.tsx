@@ -33,7 +33,7 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                     return;
                 }
 
-                const response = await axios.get(`http://127.0.0.1:8000/mp/directory/`, {
+                const response = await axios.get(`${import.meta.env.VITE_API_URL}/mp/directory/`, {
                     params: {
                         search: localSearchTerm,
                         // This handles passing the exact selected Brgy to your Django backend

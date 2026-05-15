@@ -27,7 +27,7 @@ const Consultation: React.FC = () => {
             try {
                 const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
                 const token = sessionData.token;
-                const response = await axios.get(`http://127.0.0.1:8000/mp/appointments/${id}/`, {
+                const response = await axios.get(`${import.meta.env.VITE_API_URL}/mp/appointments/${id}/`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const d = response.data;
@@ -58,7 +58,7 @@ const Consultation: React.FC = () => {
         try {
             const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
             const token = sessionData.token;
-            await axios.post(`http://127.0.0.1:8000/mp/appointments/${id}/save/`,
+            await axios.post(`${import.meta.env.VITE_API_URL}/mp/appointments/${id}/save/`,
                 { ...vitals, diagnosis, treatment, prescription, notes },
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );

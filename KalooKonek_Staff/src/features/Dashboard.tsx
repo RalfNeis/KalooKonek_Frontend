@@ -39,7 +39,71 @@ interface medicalHistory {
     prescription: string;
     status: string;
     appointment_time?: string;
+    blood_pressure?: string | null;
+    temperature?: string | null;
+    heart_rate?: string | null;
+    spo2?: string | null;
+    weight?: string | null;
+    height?: string | null;
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+export const getPatientStatusTags = (history: medicalHistory[]) => {
+    if (!history || history.length === 0) {
+        return [{ label: 'STABLE', color: 'bg-green-100 text-green-600', severity: 0 }];
+    }
+    
+    // Find the most recent COMPLETED or FINISHED record with vitals, or just use the first one
+    const latest = history[0];
+    const tags = [];
+    
+    // BP logic
+    if (latest.blood_pressure) {
+        const [sysStr, diaStr] = latest.blood_pressure.split('/');
+        const sys = parseInt(sysStr, 10);
+        const dia = parseInt(diaStr, 10);
+        
+        if (!isNaN(sys) && !isNaN(dia)) {
+            if (sys > 180 || dia > 120) tags.push({ label: 'HYPERTENSIVE CRISIS', color: 'bg-red-100 text-red-600', severity: 5 });
+            else if (sys >= 140 || dia >= 90) tags.push({ label: 'HIGH BP (STAGE 2)', color: 'bg-red-100 text-red-500', severity: 4 });
+            else if (sys >= 130 || dia >= 80) tags.push({ label: 'HIGH BP (STAGE 1)', color: 'bg-orange-100 text-orange-600', severity: 3 });
+            else if (sys >= 120 && dia < 80) tags.push({ label: 'ELEVATED BP', color: 'bg-yellow-100 text-yellow-600', severity: 2 });
+        }
+    }
+    
+    // SpO2 logic
+    if (latest.spo2) {
+        const spo2 = parseFloat(latest.spo2);
+        if (!isNaN(spo2) && spo2 < 95) {
+            tags.push({ label: 'LOW OXYGEN', color: 'bg-red-100 text-red-600', severity: 4 });
+        }
+    }
+    
+    // Temp logic
+    if (latest.temperature) {
+        const temp = parseFloat(latest.temperature);
+        if (!isNaN(temp)) {
+            if (temp >= 38.0) tags.push({ label: 'FEVER', color: 'bg-red-100 text-red-500', severity: 3 });
+            else if (temp < 35.0) tags.push({ label: 'HYPOTHERMIA', color: 'bg-blue-100 text-blue-600', severity: 3 });
+        }
+    }
+    
+    // HR logic
+    if (latest.heart_rate) {
+        const hr = parseInt(latest.heart_rate, 10);
+        if (!isNaN(hr)) {
+            if (hr > 100) tags.push({ label: 'TACHYCARDIA', color: 'bg-orange-100 text-orange-600', severity: 3 });
+            else if (hr < 60) tags.push({ label: 'BRADYCARDIA', color: 'bg-blue-100 text-blue-600', severity: 3 });
+        }
+    }
+    
+    if (tags.length === 0) {
+        return [{ label: 'STABLE', color: 'bg-green-100 text-green-600', severity: 0 }];
+    }
+    
+    // Sort by severity descending
+    return tags.sort((a, b) => b.severity - a.severity);
+};
 
 interface DashboardProps {
     externalSearchTerm?: string;
@@ -81,7 +145,7 @@ const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm, qrPatient, on
         setHistoryLoading(true);
         try {
             const res = await axios.get(
-                `http://127.0.0.1:8000/mp/patient-history/${patientId}/`,
+                `${import.meta.env.VITE_API_URL}/mp/patient-history/${patientId}/`,
                 { headers: getAuthHeader() }
             );
             
@@ -124,7 +188,7 @@ const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm, qrPatient, on
         if (!query || query.length < 3) return;
         try {
             const res = await axios.get(
-                `http://127.0.0.1:8000/mp/manual-lookup/?query=${query}`,
+                `${import.meta.env.VITE_API_URL}/mp/manual-lookup/?query=${query}`,
                 { headers: getAuthHeader() }
             );
             const results = res.data;
@@ -174,7 +238,7 @@ const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm, qrPatient, on
             const headers = getAuthHeader();
             if (!(headers as any).Authorization) { setLoading(false); return; }
             try {
-                const res = await axios.get("http://127.0.0.1:8000/mp/appointments/?tab=Today's List", { headers });
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/mp/appointments/?tab=Today's List`, { headers });
                 const active = res.data.find((p: any) => p.status !== 'FINISHED' && p.status !== 'COMPLETED');
                 if (active) setPatient(active);
             } catch (err) {
@@ -257,9 +321,13 @@ const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm, qrPatient, on
                                     ID: {patient.display_id}
                                 </p>
                             </div>
-                            <span className="px-2.5 py-1 bg-green-100 text-green-600 text-[8px] font-black rounded-lg uppercase tracking-wider">
-                                Stable
-                            </span>
+                            <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+                                {getPatientStatusTags(medicalHistory).map((tag, i) => (
+                                    <span key={i} className={`px-2.5 py-1 ${tag.color} text-[8px] font-black rounded-lg uppercase tracking-wider`}>
+                                        {tag.label}
+                                    </span>
+                                ))}
+                            </div>
                             <button
                                 onClick={() => { setPatient(null); setmedicalHistory([]); }}
                                 className="text-[9px] font-black text-gray-300 uppercase tracking-widest hover:text-[#E32636] transition-colors mt-2"

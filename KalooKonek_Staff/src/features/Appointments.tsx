@@ -45,7 +45,7 @@ const Appointments: React.FC = () => {
 
             try {
                 // Ensure this URL matches your backend exactly
-                await axios.post(`http://127.0.0.1:8000/mp/appointments/${appointmentId}/reschedule/`, 
+                await axios.post(`${import.meta.env.VITE_API_URL}/mp/appointments/${appointmentId}/reschedule/`, 
                     { date: newDate, time: newTime },
                     { headers }
                 );
@@ -71,7 +71,7 @@ const Appointments: React.FC = () => {
         setLoading(true);
         try {
             // Updated URL to use /mp/ based on your backend setup
-            const res = await axios.get(`http://127.0.0.1:8000/mp/appointments/?tab=${activeTab}`, { headers });
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/mp/appointments/?tab=${activeTab}`, { headers });
             setAppointments(res.data);
         } catch (err: any) {
             console.error("Error fetching appointments:", err);
@@ -134,13 +134,15 @@ const Appointments: React.FC = () => {
                             
                             <div className="flex-1">
                                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                                    appt.status === 'CURRENT' 
+                                    (appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED'))
                                         ? 'bg-blue-50 text-blue-600' 
-                                        : appt.status === 'COMPLETED'
+                                        : appt.status === 'COMPLETED' || appt.status === 'FINISHED'
                                             ? 'bg-slate-100 text-slate-500' 
                                             : 'bg-amber-50 text-amber-600'
                                 }`}>
-                                    {appt.status === 'CURRENT' ? 'Current Patient' : appt.status === 'COMPLETED' ? 'Finished' : 'Scheduled'}
+                                    {(appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED')) 
+                                        ? 'Current Patient' 
+                                        : (appt.status === 'COMPLETED' || appt.status === 'FINISHED') ? 'Finished' : 'Scheduled'}
                                 </span>
                                 
                                 <h3 className={`font-bold text-lg mt-0.5 ${
@@ -151,34 +153,42 @@ const Appointments: React.FC = () => {
                                 <p className="text-xs text-slate-500 font-mono">ID: {appt.display_id}</p>
                                 
                                 <p className="text-xs text-slate-600 mt-2 flex items-center gap-1.5 font-medium">
-                                    {appt.status === 'CURRENT' ? (
+                                    {(appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED')) ? (
                                         <FileText size={14} className="text-red-400" />
                                     ) : (
-                                        <CalendarDays size={14} className={appt.status === 'COMPLETED' ? 'text-slate-300' : 'text-amber-400'} />
+                                        <CalendarDays size={14} className={(appt.status === 'COMPLETED' || appt.status === 'FINISHED') ? 'text-slate-300' : 'text-amber-400'} />
                                     )}
                                     {appt.purpose}
                                 </p>
                             </div>
 
-                            <div className="flex gap-3">
-                                <button 
-                                    onClick={() => navigate(`/consultation/${appt.id}`)}
-                                    className={`${
-                                        appt.status === 'CURRENT' 
-                                        ? 'bg-[#E32636] text-white hover:bg-[#C52230]' 
-                                        : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                                    } px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-sm`}
-                                >
-                                    {appt.status === 'CURRENT' ? 'Enter Medical Notes' : 'View History'}
-                                </button>
-                                
-                                {appt.status !== 'COMPLETED' && appt.status !== 'CURRENT' && (
+                             <div className="flex gap-3">
+                                {(appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED')) ? (
                                     <button 
-                                        onClick={() => handleReschedule(appt.id)}
-                                        className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+                                        onClick={() => navigate(`/consultation/${appt.id}`)}
+                                        className="bg-[#E32636] text-white hover:bg-[#C52230] px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2"
                                     >
-                                        Reschedule
+                                        <FileText size={14} />
+                                        Enter Medical Notes
                                     </button>
+                                ) : (
+                                    <>
+                                        <button 
+                                            onClick={() => navigate(`/consultation/${appt.id}`)}
+                                            className="border border-slate-200 text-slate-600 hover:bg-slate-50 px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-sm"
+                                        >
+                                            View History
+                                        </button>
+                                        
+                                        {(appt.status !== 'COMPLETED' && appt.status !== 'FINISHED') && (
+                                            <button 
+                                                onClick={() => handleReschedule(appt.id)}
+                                                className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+                                            >
+                                                Reschedule
+                                            </button>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>
