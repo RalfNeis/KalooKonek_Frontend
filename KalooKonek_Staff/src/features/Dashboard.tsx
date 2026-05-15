@@ -1,105 +1,211 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { FileText, CalendarDays } from 'lucide-react';
 
 interface Patient {
-    id: number;
+    id: string;
     patient_name: string;
     display_id: string;
     status: string;
+    age?: number | null;
+    sex?: string | null;
+    blood_type?: string | null;
+    barangay?: string | null;
+    allergies?: string | null;
+    emergency_contact_name?: string | null;
+    emergency_contact_number?: string | null;
 }
+
+interface SearchResult {
+    id: string;
+    name: string;
+    display_id: string;
+    barangay: string | null;
+    allergies: string | null;
+    address: string | null;
+    blood_type: string | null;
+    age: number | null;
+    sex: string | null;
+    emergency_contact_name: string | null;
+    emergency_contact_number: string | null;
+}
+
+interface medicalHistory {
+    id: number;
+    visit_date: string;
+    diagnosis: string;
+    treatment: string;
+    prescription: string;
+    status: string;
+    appointment_time?: string;
+    blood_pressure?: string | null;
+    temperature?: string | null;
+    heart_rate?: string | null;
+    spo2?: string | null;
+    weight?: string | null;
+    height?: string | null;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+export const getPatientStatusTags = (history: medicalHistory[]) => {
+    if (!history || history.length === 0) {
+        return [{ label: 'STABLE', color: 'bg-green-100 text-green-600', severity: 0 }];
+    }
+    
+    // Find the most recent COMPLETED or FINISHED record with vitals, or just use the first one
+    const latest = history[0];
+    const tags = [];
+    
+    // BP logic
+    if (latest.blood_pressure) {
+        const [sysStr, diaStr] = latest.blood_pressure.split('/');
+        const sys = parseInt(sysStr, 10);
+        const dia = parseInt(diaStr, 10);
+        
+        if (!isNaN(sys) && !isNaN(dia)) {
+            if (sys > 180 || dia > 120) tags.push({ label: 'HYPERTENSIVE CRISIS', color: 'bg-red-100 text-red-600', severity: 5 });
+            else if (sys >= 140 || dia >= 90) tags.push({ label: 'HIGH BP (STAGE 2)', color: 'bg-red-100 text-red-500', severity: 4 });
+            else if (sys >= 130 || dia >= 80) tags.push({ label: 'HIGH BP (STAGE 1)', color: 'bg-orange-100 text-orange-600', severity: 3 });
+            else if (sys >= 120 && dia < 80) tags.push({ label: 'ELEVATED BP', color: 'bg-yellow-100 text-yellow-600', severity: 2 });
+        }
+    }
+    
+    // SpO2 logic
+    if (latest.spo2) {
+        const spo2 = parseFloat(latest.spo2);
+        if (!isNaN(spo2) && spo2 < 95) {
+            tags.push({ label: 'LOW OXYGEN', color: 'bg-red-100 text-red-600', severity: 4 });
+        }
+    }
+    
+    // Temp logic
+    if (latest.temperature) {
+        const temp = parseFloat(latest.temperature);
+        if (!isNaN(temp)) {
+            if (temp >= 38.0) tags.push({ label: 'FEVER', color: 'bg-red-100 text-red-500', severity: 3 });
+            else if (temp < 35.0) tags.push({ label: 'HYPOTHERMIA', color: 'bg-blue-100 text-blue-600', severity: 3 });
+        }
+    }
+    
+    // HR logic
+    if (latest.heart_rate) {
+        const hr = parseInt(latest.heart_rate, 10);
+        if (!isNaN(hr)) {
+            if (hr > 100) tags.push({ label: 'TACHYCARDIA', color: 'bg-orange-100 text-orange-600', severity: 3 });
+            else if (hr < 60) tags.push({ label: 'BRADYCARDIA', color: 'bg-blue-100 text-blue-600', severity: 3 });
+        }
+    }
+    
+    if (tags.length === 0) {
+        return [{ label: 'STABLE', color: 'bg-green-100 text-green-600', severity: 0 }];
+    }
+    
+    // Sort by severity descending
+    return tags.sort((a, b) => b.severity - a.severity);
+};
 
 interface DashboardProps {
     externalSearchTerm?: string;
+    qrPatient?: any;                    // patient object passed in from QRScanner via App
+    onQrPatientConsumed?: () => void;   // clears qrPatient after Dashboard loads it
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm }) => {
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm, qrPatient, onQrPatientConsumed }) => {
+    const navigate = useNavigate();
     const [patient, setPatient] = useState<Patient | null>(null);
     const [loading, setLoading] = useState(true);
-    const [vitals, setVitals] = useState({
-        bp: '', temp: '', weight: '', height: '',
-        spo2: '', heartRate: '', respiRate: '', 
-        notes: '', diagnosis: '', prescription: '' 
-    });
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [medicalHistory, setmedicalHistory] = useState<medicalHistory[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const getAuthHeader = () => {
         const session = localStorage.getItem('kka_admin_session');
         if (session) {
             const { token } = JSON.parse(session);
-            return { Authorization: `Token ${token}` };
+            return { Authorization: `Bearer ${token}` };
         }
         return {};
     };
 
-    const getMedicalTags = () => {
-        const tags: { label: string; color: string }[] = [];
-        
-        if (vitals.bp && vitals.bp.includes('/')) {
-            const [sys, dia] = vitals.bp.split('/').map(Number);
-            if (!isNaN(sys) && !isNaN(dia)) {
-                if (sys > 180 || dia > 120) {
-                    tags.push({ label: "Hypertensive Crisis", color: "bg-black text-white animate-pulse" });
-                } else if (sys >= 140 || dia >= 90) {
-                    tags.push({ label: "Stage 2 Hypertension", color: "bg-red-600 text-white" });
-                } else if ((sys >= 130 && sys <= 139) || (dia >= 80 && dia <= 89)) {
-                    tags.push({ label: "Stage 1 Hypertension", color: "bg-red-400 text-white" });
-                } else if ((sys >= 120 && sys <= 129) && dia < 80) {
-                    tags.push({ label: "Elevated BP", color: "bg-orange-400 text-white" });
-                }
+    const fetchmedicalHistory = async (patientId: string) => {
+        setHistoryLoading(true);
+        try {
+            const res = await axios.get(
+                `${import.meta.env.VITE_API_URL}/mp/patient-history/${patientId}/`,
+                { headers: getAuthHeader() }
+            );
+            
+            // The backend returns a flat array of records directly
+            if (Array.isArray(res.data)) {
+                setmedicalHistory(res.data);
+            } else {
+                console.error('API did not return an array:', res.data);
+                setmedicalHistory([]);
             }
+        } catch (err) {
+            console.error('History fetch error:', err);
+            setmedicalHistory([]);
+        } finally {
+            setHistoryLoading(false);
         }
+    };
 
-        const w = parseFloat(vitals.weight);
-        const h = parseFloat(vitals.height) / 100;
-        if (!isNaN(w) && !isNaN(h) && h > 0) {
-            const bmi = w / (h * h);
-            if (bmi >= 30) tags.push({ label: `Obese (${bmi.toFixed(1)})`, color: "bg-purple-700 text-white" });
-            else if (bmi >= 25) tags.push({ label: `Overweight (${bmi.toFixed(1)})`, color: "bg-orange-500 text-white" });
-            else if (bmi < 18.5) tags.push({ label: `Underweight (${bmi.toFixed(1)})`, color: "bg-blue-400 text-white" });
-        }
-
-        const rr = parseFloat(vitals.respiRate);
-        if (!isNaN(rr) && rr > 0) {
-            if (rr > 20) tags.push({ label: "Tachypnea", color: "bg-red-500 text-white" });
-            else if (rr < 12) tags.push({ label: "Bradypnea", color: "bg-blue-500 text-white" });
-        }
-
-        const hr = parseFloat(vitals.heartRate);
-        if (!isNaN(hr) && hr > 0) {
-            if (hr >= 100) tags.push({ label: "Tachycardia", color: "bg-red-400 text-white" });
-            else if (hr < 60) tags.push({ label: "Bradycardia", color: "bg-blue-400 text-white" });
-        }
-
-        const t = parseFloat(vitals.temp);
-        if (!isNaN(t)) {
-            if (t >= 38.0) tags.push({ label: "Fever", color: "bg-orange-600 text-white" });
-            else if (t < 35.0) tags.push({ label: "Hypothermia", color: "bg-cyan-600 text-white" });
-        }
-
-        const ox = parseFloat(vitals.spo2);
-        if (!isNaN(ox) && ox > 0 && ox < 95) {
-            tags.push({ label: "Low SpO2", color: "bg-indigo-600 text-white" });
-        }
-
-        return tags;
+    const selectPatient = (data: SearchResult) => {
+        const p: Patient = {
+            id: data.id,
+            patient_name: data.name,
+            display_id: data.display_id,
+            status: 'ACTIVE',
+            age: data.age,
+            sex: data.sex,
+            blood_type: data.blood_type,
+            barangay: data.barangay,
+            allergies: data.allergies,
+            emergency_contact_name: data.emergency_contact_name,
+            emergency_contact_number: data.emergency_contact_number,
+        };
+        setPatient(p);
+        setShowDropdown(false);
+        setSearchResults([]);
+        fetchmedicalHistory(data.id);
     };
 
     const handleManualLookup = async (query: string) => {
-        if (!query || query.length < 2) return;
+        if (!query || query.length < 3) return;
         try {
-            const res = await axios.get(`http://127.0.0.1:8000/accounts/appointments/?search=${query}`, {
-                headers: getAuthHeader()
-            });
-            const found = res.data.find((p: Patient) => p.status !== 'FINISHED' && p.status !== 'COMPLETED');
-            if (found) {
-                setPatient(found);
-                setVitals({
-                    bp: '', temp: '', weight: '', height: '',
-                    spo2: '', heartRate: '', respiRate: '',
-                    notes: '', diagnosis: '', prescription: '' 
-                });
+            const res = await axios.get(
+                `${import.meta.env.VITE_API_URL}/mp/manual-lookup/?query=${query}`,
+                { headers: getAuthHeader() }
+            );
+            const results = res.data;
+            if (!Array.isArray(results) || results.length === 0) {
+                setPatient(null); setSearchResults([]); setShowDropdown(false);
+                return;
             }
-        } catch (err) {
-            console.error("Lookup Error:", err);
+            if (results.length === 1) {
+                selectPatient(results[0]);
+            } else {
+                setSearchResults(results);
+                setShowDropdown(true);
+            }
+        } catch (err: any) {
+            if (err.response?.status === 404) {
+                setPatient(null); setSearchResults([]); setShowDropdown(false);
+            }
         }
     };
 
@@ -107,19 +213,36 @@ const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm }) => {
         if (externalSearchTerm) handleManualLookup(externalSearchTerm);
     }, [externalSearchTerm]);
 
+    // Consume patient passed in from the QRScanner in App/HeaderActions
+    useEffect(() => {
+        if (qrPatient) {
+            selectPatient({
+                id: qrPatient.id,
+                name: qrPatient.name,
+                display_id: qrPatient.display_id,
+                age: qrPatient.age,
+                sex: qrPatient.sex,
+                blood_type: qrPatient.blood_type,
+                barangay: qrPatient.barangay,
+                allergies: qrPatient.allergies,
+                address: null,
+                emergency_contact_name: qrPatient.emergency_contact_name ?? null,
+                emergency_contact_number: qrPatient.emergency_contact_number ?? null,
+            });
+            if (onQrPatientConsumed) onQrPatientConsumed();
+        }
+    }, [qrPatient]);
+
     useEffect(() => {
         const fetchCurrent = async () => {
             const headers = getAuthHeader();
-            if (!headers.Authorization) {
-                setLoading(false);
-                return;
-            }
+            if (!(headers as any).Authorization) { setLoading(false); return; }
             try {
-                const res = await axios.get("http://127.0.0.1:8000/accounts/appointments/?tab=Today's List", { headers });
-                const active = res.data.find((p: Patient) => p.status !== 'FINISHED' && p.status !== 'COMPLETED');
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/mp/appointments/?tab=Today's List`, { headers });
+                const active = res.data.find((p: any) => p.status !== 'FINISHED' && p.status !== 'COMPLETED');
                 if (active) setPatient(active);
             } catch (err) {
-                console.error("Sync Error:", err);
+                console.error('Sync Error:', err);
             } finally {
                 setLoading(false);
             }
@@ -127,120 +250,201 @@ const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm }) => {
         fetchCurrent();
     }, []);
 
-    const handleSaveRecord = async () => {
-        if (!patient) return;
-        try {
-            // Note: Sending 'prescription' separately if your backend needs it, 
-            // otherwise common Django setups use 'diagnosis' for the second box.
-            await axios.post(`http://127.0.0.1:8000/accounts/appointments/${patient.id}/save/`, 
-                { ...vitals }, 
-                { headers: getAuthHeader() }
-            );
-            alert("Record Saved Successfully!");
-            window.location.reload(); 
-        } catch (err: any) {
-            console.error("Save Error:", err.response?.data);
-            alert("Save failed. Make sure your model has the correct fields.");
-        }
-    };
-
     if (loading) return <div className="p-10 text-center font-bold text-gray-400">Loading Clinical Data...</div>;
+
+    const capitalize = (s?: string | null) =>
+        s ? s.charAt(0).toUpperCase() + s.slice(1) : 'N/A';
 
     return (
         <div className="w-full">
-            {patient ? (
-                <div className="bg-white rounded-4xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in duration-500">
-                    <div className="flex flex-col md:flex-row">
-                        
-                        <div className="w-full md:w-1/3 bg-slate-50/50 p-8 border-r border-gray-100 flex flex-col items-center text-center">
-                            <div className="relative mb-6">
-                                <div className="w-28 h-28 bg-orange-100 rounded-full flex items-center justify-center text-4xl shadow-inner border-4 border-white">👤</div>
-                                <div className="absolute bottom-1 right-1 w-6 h-6 bg-green-500 border-2 border-white rounded-full"></div>
-                            </div>
-                            <h1 className="text-2xl font-black text-slate-800 leading-tight mb-1">{patient.patient_name}</h1>
-                            <p className="text-gray-400 font-bold text-xs mb-4 uppercase tracking-widest">ID: {patient.display_id}</p>
-                            
-                            <div className="flex flex-wrap justify-center gap-2">
-                                {getMedicalTags().length > 0 ? (
-                                    getMedicalTags().map((tag, i) => (
-                                        <span key={i} className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${tag.color}`}>
-                                            {tag.label}
-                                        </span>
-                                    ))
-                                ) : (
-                                    <span className="px-3 py-1 bg-green-100 text-green-600 text-[9px] font-black rounded-lg uppercase">Stable / Normal</span>
-                                )}
-                            </div>
+
+            {/* Search Dropdown */}
+            {showDropdown && searchResults.length > 0 && (
+                <div ref={dropdownRef} className="relative z-50 mb-4">
+                    <div className="bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden">
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-50">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                {searchResults.length} patients found
+                            </p>
+                            <button
+                                onClick={() => setShowDropdown(false)}
+                                className="text-gray-300 hover:text-gray-500 text-xs font-bold transition-colors"
+                            >
+                                ✕ Close
+                            </button>
                         </div>
-
-                        <div className="w-full md:w-2/3 p-8">
-                            <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-6">New Medical Entry</h3>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-                                {[
-                                    { label: 'BP (MMHG)', key: 'bp', ph: '120/80' },
-                                    { label: 'TEMP (°C)', key: 'temp', ph: '36.5' },
-                                    { label: 'WEIGHT (KG)', key: 'weight', ph: '65' },
-                                    { label: 'HEIGHT (CM)', key: 'height', ph: '170' },
-                                    { label: 'SpO2 (%)', key: 'spo2', ph: '98' },
-                                    { label: 'HR (BPM)', key: 'heartRate', ph: '72' },
-                                    { label: 'RR (BPM)', key: 'respiRate', ph: '16' }
-                                ].map((field) => (
-                                    <div key={field.key} className="space-y-1.5">
-                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{field.label}</label>
-                                        <input 
-                                            value={vitals[field.key as keyof typeof vitals]}
-                                            className="w-full bg-slate-50 border-2 border-transparent rounded-xl p-3 text-sm font-bold focus:bg-white focus:border-red-100 outline-none transition-all shadow-sm"
-                                            placeholder={field.ph}
-                                            onChange={(e) => setVitals({...vitals, [field.key as keyof typeof vitals]: e.target.value})}
-                                        />
+                        <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                            {searchResults.map((result) => (
+                                <button
+                                    key={result.id}
+                                    onClick={() => selectPatient(result)}
+                                    className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-red-50 transition-colors text-left group"
+                                >
+                                    <div className="w-9 h-9 bg-orange-100 rounded-full flex items-center justify-center text-base shrink-0">
+                                        👤
                                     </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-slate-800 truncate">{result.name}</p>
+                                        <p className="text-[10px] text-gray-400 font-medium">ID: {result.display_id}</p>
+                                    </div>
+                                    {result.barangay && (
+                                        <span className="text-[9px] text-gray-300 font-medium shrink-0 hidden sm:block">
+                                            {result.barangay}
+                                        </span>
+                                    )}
+                                    <span className="text-[#E32636] text-xs font-black shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        Select →
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Patient Card or Empty State */}
+            {patient ? (
+                <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+                    <div className="flex flex-col lg:flex-row">
+
+                        {/* LEFT — Patient Avatar & Switch */}
+                        <div className="w-full lg:w-64 shrink-0 bg-white border-r border-gray-100 p-8 flex flex-col items-center text-center gap-4">
+                            <div className="relative mt-2">
+                                <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center text-4xl shadow-inner border-4 border-white">
+                                    👤
+                                </div>
+                                <div className="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"></div>
+                            </div>
+                            <div>
+                                <h1 className="text-lg font-black text-slate-800 leading-tight">{patient.patient_name}</h1>
+                                <p className="text-gray-400 font-bold text-[10px] mt-1 uppercase tracking-widest">
+                                    ID: {patient.display_id}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+                                {getPatientStatusTags(medicalHistory).map((tag, i) => (
+                                    <span key={i} className={`px-2.5 py-1 ${tag.color} text-[8px] font-black rounded-lg uppercase tracking-wider`}>
+                                        {tag.label}
+                                    </span>
                                 ))}
                             </div>
+                            <button
+                                onClick={() => { setPatient(null); setmedicalHistory([]); }}
+                                className="text-[9px] font-black text-gray-300 uppercase tracking-widest hover:text-[#E32636] transition-colors mt-2"
+                            >
+                                ← Switch Patient
+                            </button>
+                        </div>
 
-                            <div className="space-y-5">
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Clinical Findings</label>
-                                    <textarea 
-                                        value={vitals.notes}
-                                        className="w-full bg-slate-50 border-2 border-transparent rounded-2xl p-4 text-sm font-medium h-24 focus:bg-white focus:border-red-100 outline-none resize-none transition-all"
-                                        placeholder="Findings..."
-                                        // FIXED: Only updates 'notes' now
-                                        onChange={(e) => setVitals({...vitals, notes: e.target.value})}
-                                    />
+                        {/* RIGHT — Content */}
+                        <div className="flex-1 p-8">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6">
+                                Medical Record & Profile
+                            </p>
+
+                            {/* ── PATIENT RECORD INFO (replaces vitals grid) ── */}
+                            <div className="bg-slate-900 text-white rounded-2xl p-5 mb-6">
+                                <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-1">Patient Record</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 border-t border-slate-800 pt-4 text-xs">
+                                    {[
+                                        { label: 'Patient ID', value: patient.display_id },
+                                        { label: 'Age', value: patient.age ? `${patient.age} yrs` : 'N/A' },
+                                        { label: 'Sex', value: capitalize(patient.sex) },
+                                        { label: 'Blood Type', value: patient.blood_type?.toUpperCase() || 'N/A' },
+                                        { label: 'Barangay', value: patient.barangay || 'N/A' },
+                                    ].map(({ label, value }) => (
+                                        <div key={label} className="flex flex-col gap-0.5">
+                                            <span className="text-slate-400 text-[9px] uppercase tracking-wider">{label}</span>
+                                            <span className="font-bold uppercase text-white">{value}</span>
+                                        </div>
+                                    ))}
                                 </div>
+                                {patient.allergies && patient.allergies !== 'None' && (
+                                    <div className="mt-3 pt-3 border-t border-slate-800">
+                                        <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">⚠ Allergies: </span>
+                                        <span className="text-xs text-red-300">{patient.allergies}</span>
+                                    </div>
+                                )}
+                            </div>
 
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Diagnosis & Prescription</label>
-                                    <textarea 
-                                        value={vitals.diagnosis}
-                                        className="w-full bg-slate-50 border-2 border-transparent rounded-2xl p-4 text-sm font-medium h-20 focus:bg-white focus:border-red-100 outline-none resize-none transition-all"
-                                        placeholder="Diagnosis and Medicine..."
-                                        // FIXED: Correctly maps to 'diagnosis'
-                                        onChange={(e) => setVitals({...vitals, diagnosis: e.target.value})}
-                                    />
+                            {/* ── MEDICAL HISTORY (replaces 4 boxes) ── */}
+                            <div className="mb-6">
+                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                                    Medical History
+                                </p>
+
+                                <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                                    {historyLoading ? (
+                                        <div className="text-center py-8">
+                                            <div className="animate-spin w-5 h-5 border-2 border-red-400 border-t-transparent rounded-full mx-auto mb-2" />
+                                            <p className="text-slate-400 text-xs">Loading records...</p>
+                                        </div>
+                                    ) : medicalHistory.length === 0 ? (
+                                        <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                            <p className="text-slate-400 text-xs italic">No medical records found.</p>
+                                        </div>
+                                    ) : (
+                                        medicalHistory.map((record) => (
+                                            <div
+                                                key={record.id}
+                                                className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-4 hover:border-blue-100 transition-all shadow-sm group"
+                                            >
+                                                {/* Time / Date */}
+                                                <div className="text-center min-w-15">
+                                                    <p className="font-bold text-sm text-slate-800">
+                                                        {record.appointment_time || 'TBA'}
+                                                    </p>
+                                                    <p className="text-[10px] text-slate-400">{record.visit_date}</p>
+                                                </div>
+
+                                                <div className="flex-1 min-w-0">
+                                                    {/* Status badge */}
+                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                                        record.status === 'COMPLETED'
+                                                            ? 'bg-slate-100 text-slate-500'
+                                                            : 'bg-amber-50 text-amber-600'
+                                                    }`}>
+                                                        {record.status === 'COMPLETED' ? 'Finished' : record.status}
+                                                    </span>
+
+                                                    <p className="text-xs text-slate-600 mt-1.5 flex items-center gap-1.5 font-medium">
+                                                        <CalendarDays size={12} className="text-slate-300 shrink-0" />
+                                                        <span className="truncate">
+                                                            {record.diagnosis
+                                                                ? record.diagnosis.slice(0, 40) + (record.diagnosis.length > 40 ? '...' : '')
+                                                                : 'Medical Consultation'}
+                                                        </span>
+                                                    </p>
+                                                </div>
+
+                                                {/* View button */}
+                                                <button
+                                                    onClick={() => navigate(`/consultation/${record.id}`)}
+                                                    className="shrink-0 flex items-center gap-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                                                >
+                                                    <FileText size={12} />
+                                                    View
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-end gap-6 mt-8">
-                                <button 
-                                    onClick={() => window.location.href = '/appointments'}
-                                    className="text-gray-400 font-black text-[10px] uppercase tracking-widest hover:text-[#E53E3E] transition-colors"
+                            {/* ── ACTIONS ── */}
+                            <div className="flex items-center justify-end gap-4">
+                                <button
+                                    onClick={() => navigate(`/consultation/new?patient=${patient.id}`)}
+                                    className="bg-[#E32636] text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-100 hover:bg-[#C52230] hover:-translate-y-0.5 active:scale-95 transition-all"
                                 >
-                                    View History
-                                </button>
-                                <button 
-                                    onClick={handleSaveRecord}
-                                    className="bg-[#E53E3E] text-white px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-red-100 hover:bg-[#c53030] hover:-translate-y-0.5 active:scale-95 transition-all"
-                                >
-                                    Save Record
+                                    Consult
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
             ) : (
-                <div className="p-12 text-center bg-white rounded-4xl border-2 border-dashed border-slate-100">
+                <div className="p-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-100">
                     <p className="text-slate-300 font-bold">Search or Scan QR to select a patient.</p>
                 </div>
             )}

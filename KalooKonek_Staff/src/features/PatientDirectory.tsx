@@ -16,10 +16,6 @@ const PatientDirectory: React.FC<DirectoryProps> = ({ searchTerm }) => {
             Registered Senior Citizens
           </p>
         </div>
-        
-        <button className="bg-[#E11D48] text-white text-[10px] font-black px-5 py-3 rounded-lg shadow-sm hover:bg-rose-700 transition-all flex items-center gap-2">
-            <span className="text-sm">⊞</span> SCAN PATIENT QR
-        </button>
       </div>
 
       {/* The full table with filtering logic */}

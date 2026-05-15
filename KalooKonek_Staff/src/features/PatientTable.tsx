@@ -33,14 +33,15 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                     return;
                 }
 
-                const response = await axios.get(`http://127.0.0.1:8000/accounts/directory/`, {
+                const response = await axios.get(`${import.meta.env.VITE_API_URL}/mp/directory/`, {
                     params: {
                         search: localSearchTerm,
+                        // This handles passing the exact selected Brgy to your Django backend
                         barangay: selectedBarangay === 'All Barangays' ? '' : selectedBarangay,
                         status: selectedStatus === 'Filter Status' ? '' : selectedStatus
                     },
                     headers: {
-                        'Authorization': `Token ${token}`,
+                        'Authorization': `Bearer ${token}`,
                         'Accept': 'application/json',
                     }
                 });
@@ -73,9 +74,13 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                     value={selectedBarangay}
                     onChange={(e) => setSelectedBarangay(e.target.value)}
                 >
-                    <option>All Barangays</option>
-                    <option>Brgy. 171</option>
-                    <option>Brgy. 172</option>
+                    <option value="All Barangays">All Barangays</option>
+                    {/* FIXED: Dynamically renders Brgy. 100 through Brgy. 110 */}
+                    {Array.from({ length: 11 }, (_, i) => 100 + i).map(num => (
+                        <option key={num} value={`Brgy. ${num}`}>
+                            Brgy. {num}
+                        </option>
+                    ))}
                 </select>
 
                 <select 
@@ -83,7 +88,7 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
                 >
-                    <option>Filter Status</option>
+                    <option value="Filter Status">Filter Status</option>
                     <option value="COMPLETED">Completed</option>
                     <option value="PENDING">Pending</option>
                 </select>
@@ -107,10 +112,13 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                         patients.map((patient: any) => (
                             <PatientRow 
                                 key={patient.id} 
-                                {...patient} 
-                                // Mapping the backend "last_visit" to your frontend "last_visit_date"
+                                id={patient.display_id || patient.id} 
+                                numeric_id={patient.id}
+                                name={`${patient.first_name} ${patient.last_name}`} 
+                                age={patient.age}
+                                gender={patient.gender}
+                                barangay={patient.barangay}
                                 last_visit_date={patient.last_visit}
-                                // Example: If you want to show a hardcoded tag for now
                                 medical_tags={patient.age >= 60 ? ["SENIOR"] : []}
                             />
                         ))

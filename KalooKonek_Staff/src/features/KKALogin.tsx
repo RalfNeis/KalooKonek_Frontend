@@ -1,8 +1,9 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { supabase } from '../supabaseClient';
 
-// 1. Define the possible pages
+// --- Types & Constants ---
+
 const PAGES = {
   SIGNIN: "signin",
   FORGOT: "forgot",
@@ -11,11 +12,25 @@ const PAGES = {
 
 type PageType = typeof PAGES[keyof typeof PAGES];
 
-// --- Sub-Components (Styled for KalooKonek) ---
+interface DjangoProfileResponse {
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  role: string;
+  error?: string;
+}
 
-const LeftPanel = ({ title, subtitle, description }: any) => (
+interface SessionData extends DjangoProfileResponse {
+  token: string;
+  adminId: string;
+  username: string;
+}
+
+// --- Sub-Components ---
+
+const LeftPanel = ({ title, subtitle, description }: { title: string; subtitle?: string; description: string }) => (
   <div style={{
-    background: "linear-gradient(135deg, #1a0a0a 0%, #2d1515 30%, #1a2040 70%, #0d1530 100%)",
+    background: "linear-gradient(135deg, #0a151a 0%, #15252d 30%, #1a2b40 70%, #0d1a30 100%)",
     position: "relative", overflow: "hidden", display: "flex", flexDirection: "column",
     justifyContent: "space-between", padding: "40px", color: "white", width: "42%",
     minWidth: "420px", minHeight: "100vh", flexShrink: 0, boxSizing: "border-box",
@@ -23,7 +38,7 @@ const LeftPanel = ({ title, subtitle, description }: any) => (
     <div style={{ position: "relative", zIndex: 1 }}>
       <div className="flex items-center gap-2 mb-16">
         <span style={{ fontFamily: "'Outfit', sans-serif", fontSize: 16, fontWeight: 500 }}>
-          KalooKonek <span style={{ color: "#e85555", fontWeight: 700 }}>Admin</span>
+          KalooKonek <span style={{ color: "#38bdf8", fontWeight: 700 }}>Medical</span>
         </span>
       </div>
       <h1 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 38, fontWeight: 700 }}>{title}</h1>
@@ -35,8 +50,8 @@ const LeftPanel = ({ title, subtitle, description }: any) => (
 );
 
 const BadgePill = ({ text }: { text: string }) => (
-  <div style={{ border: "1px solid #e85555", borderRadius: 999, padding: "4px 12px", marginBottom: 20, display: "inline-block" }}>
-    <span style={{ color: "#e85555", fontSize: 10, fontWeight: 700 }}>{text}</span>
+  <div style={{ border: "1px solid #38bdf8", borderRadius: 999, padding: "4px 12px", marginBottom: 20, display: "inline-block" }}>
+    <span style={{ color: "#38bdf8", fontSize: 10, fontWeight: 700 }}>{text}</span>
   </div>
 );
 
@@ -45,7 +60,7 @@ const InputField = ({ label, id, type = "text", placeholder, value, onChange, ri
     <div style={{ display: "flex", justifyContent: "space-between" }}>
       <label htmlFor={id} style={{ display: "block", fontSize: 13, fontWeight: 500, marginBottom: 6 }}>{label}</label>
       {rightLabel && (
-        <button type="button" onClick={onRightClick} style={{ color: "#e85555", fontSize: 12, background: "none", border: "none", cursor: "pointer" }}>
+        <button type="button" onClick={onRightClick} style={{ color: "#38bdf8", fontSize: 12, background: "none", border: "none", cursor: "pointer" }}>
           {rightLabel}
         </button>
       )}
@@ -63,7 +78,7 @@ const PrimaryButton = ({ children, onClick, type = "button", disabled }: any) =>
     onClick={onClick}
     disabled={disabled}
     style={{ 
-      width: "100%", padding: "12px", background: disabled ? "#999" : "#cc2222", 
+      width: "100%", padding: "12px", background: disabled ? "#999" : "#0284c7", 
       color: "white", border: "none", borderRadius: 8, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer" 
     }}
   >
@@ -73,7 +88,7 @@ const PrimaryButton = ({ children, onClick, type = "button", disabled }: any) =>
 
 // --- Main Page Logic ---
 
-export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: any) => void }) {
+export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: SessionData) => void }) {
   const [page, setPage] = useState<PageType>(PAGES.SIGNIN);
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
@@ -81,64 +96,83 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
   const navigate = useNavigate();
 
   const handleSignIn = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setLoading(true);
+    e.preventDefault();
+    if (!id || !pw) return alert("Please fill in all fields.");
+    
+    setLoading(true);
 
-      try {
-          // Correct endpoint aligned with core/accounts routing
-          const response = await axios.post('http://127.0.0.1:8000/accounts/login/', {
-              username: id,
-              password: pw
-          });
+    try {
+      // 1. Authenticate with Supabase
+      const { data: sbData, error: sbError } = await supabase.auth.signInWithPassword({
+        email: id, 
+        password: pw,
+      });
 
-          if (response.data) {
-              // Extraction covers common Django response keys (TokenAuth, SimpleJWT, Knox)
-              const tokenValue = response.data.token || 
-                                 response.data.access || 
-                                 response.data.key || 
-                                 response.data.access_token;
-              
-              if (tokenValue) {
-                  // Construct the specific session object PatientTable.tsx expects
-                  const sessionData = {
-                      token: tokenValue, 
-                      adminId: id,
-                      ...response.data
-                  };
+      if (sbError) throw sbError;
 
-                  // Clear stale data and save fresh session
-                  localStorage.removeItem("kka_admin_session");
-                  localStorage.setItem("kka_admin_session", JSON.stringify(sessionData));
-                  
-                  // Optional: maintain legacy key for other parts of the app
-                  localStorage.setItem("sb-access-token", tokenValue);
+      if (sbData.session) {
+        // 2. Sync with Django Backend
+        // Note: Using POST as per your requirement to send credentials
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/accounts/login/`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            // ❌ Remove this line — login endpoint is AllowAny, 
+            // and sending a Supabase JWT confuses DRF's TokenAuthentication
+            // 'Authorization': `Bearer ${sbData.session.access_token}`
+          },
+          body: JSON.stringify({ 
+            username: id, 
+            password: pw 
+          })
+        });
 
-                  onLoginSuccess(sessionData); 
-                  navigate("/dashboard"); 
-              } else {
-                  alert("Authentication successful, but no token was provided by the server.");
-              }
-          }
-      } catch (error: any) {
-          console.error("Login failed:", error);
+        const djangoData: DjangoProfileResponse = await response.json();
+
+        if (response.ok) {
+          // 3. Construct Session
+          const sessionData: SessionData = {
+            token: sbData.session.access_token, 
+            adminId: id,
+            username: id,
+            first_name: djangoData.first_name,
+            last_name: djangoData.last_name,
+            full_name: djangoData.full_name, 
+            role: djangoData.role,
+          };
+
+          // 4. Save and Navigate
+          localStorage.setItem("kka_admin_session", JSON.stringify(sessionData));
           
-          if (error.response?.status === 404) {
-              alert("Endpoint not found. Please check your Django URL configuration.");
-          } else {
-              const errMsg = error.response?.data?.error || 
-                             error.response?.data?.detail || 
-                             "Invalid Admin ID or Password.";
-              alert(errMsg);
-          }
-      } finally {
-          setLoading(false);
+          onLoginSuccess(sessionData); 
+          navigate("/dashboard"); 
+        } else {
+          throw new Error(djangoData.error || "Django synchronization failed.");
+        }
       }
+    } catch (error: any) {
+      console.error("Login sequence failed:", error);
+      alert(error.message || "Invalid Email or Password.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const leftPanelProps = {
-    [PAGES.SIGNIN]: { title: "Barangay", subtitle: "Management Portal", description: "Secure access for barangay officials to verify users and manage appointments." },
-    [PAGES.FORGOT]: { title: "Recovery", description: "Securely reset your admin credentials to regain access." },
-    [PAGES.REQUEST]: { title: "Access", subtitle: "System", description: "Submit your credentials for verification to the IT Office." },
+    [PAGES.SIGNIN]: { 
+      title: "Medical Staff", 
+      subtitle: "Access Portal", 
+      description: "Secure access for healthcare personnel to manage senior citizen health records and appointments across Caloocan City." 
+    },
+    [PAGES.FORGOT]: { 
+      title: "Recovery", 
+      description: "Securely reset your staff credentials to regain access to patient records." 
+    },
+    [PAGES.REQUEST]: { 
+      title: "Access", 
+      subtitle: "System", 
+      description: "Submit your credentials for verification to the City Health Department." 
+    },
   };
 
   return (
@@ -152,12 +186,12 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
           
           {page === PAGES.SIGNIN && (
             <form onSubmit={handleSignIn}>
-              <BadgePill text="AUTHORIZED PERSONNEL ONLY" />
-              <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20 }}>Admin Sign In</h2>
+              <BadgePill text="MEDICAL STAFF ONLY" />
+              <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20 }}>Staff Sign In</h2>
               <InputField 
-                label="Admin ID" 
-                id="adminId" 
-                placeholder="2025-001" 
+                label="Staff Email" 
+                id="staffId" 
+                placeholder="staff@example.com" 
                 value={id} 
                 onChange={(e: any) => setId(e.target.value)} 
                 disabled={loading}
@@ -175,8 +209,8 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
               />
               <PrimaryButton type="submit" disabled={loading}>Sign In</PrimaryButton>
               <p style={{ textAlign: "center", fontSize: 13, marginTop: 20 }}>
-                Need admin access?{" "}
-                <button type="button" onClick={() => setPage(PAGES.REQUEST)} style={{ color: "#e85555", border: "none", background: "none", fontWeight: 600, cursor: "pointer" }}>
+                Need medical access?{" "}
+                <button type="button" onClick={() => setPage(PAGES.REQUEST)} style={{ color: "#0284c7", border: "none", background: "none", fontWeight: 600, cursor: "pointer" }}>
                   Request Account
                 </button>
               </p>
@@ -187,7 +221,7 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
             <div>
               <BadgePill text="SECURITY PROTOCOL" />
               <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20 }}>Reset Password</h2>
-              <InputField label="Admin Email" id="email" placeholder="admin@tup.edu.ph" />
+              <InputField label="Staff Email" id="email" placeholder="staff@caloocan.gov.ph" />
               <PrimaryButton onClick={() => alert("Reset link sent!")}>Send Reset Link</PrimaryButton>
               <button onClick={() => setPage(PAGES.SIGNIN)} style={{ marginTop: 20, width: "100%", background: "none", border: "none", color: "#777", cursor: "pointer" }}>
                 Back to Login
@@ -200,14 +234,13 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
               <BadgePill text="REGISTRATION" />
               <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20 }}>Request Access</h2>
               <InputField label="Full Name" id="name" placeholder="Juan Dela Cruz" />
-              <InputField label="Employee ID" id="emp" placeholder="EMP-2025" />
+              <InputField label="Medical License ID" id="emp" placeholder="PRC-123456" />
               <PrimaryButton onClick={() => alert("Request Submitted!")}>Submit Request</PrimaryButton>
               <button onClick={() => setPage(PAGES.SIGNIN)} style={{ marginTop: 20, width: "100%", background: "none", border: "none", color: "#777", cursor: "pointer" }}>
                 Back to Login
               </button>
             </div>
           )}
-
         </div>
       </div>
     </div>

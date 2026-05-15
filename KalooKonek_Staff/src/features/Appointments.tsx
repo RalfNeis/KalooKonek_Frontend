@@ -21,44 +21,63 @@ const Appointments: React.FC = () => {
     
     const tabs = ["Today's List", 'Upcoming', 'Past Records'];
 
+    // Helper to get headers (centralized to avoid repeating logic)
+    const getAuthHeader = () => {
+        const sessionData = localStorage.getItem('kka_admin_session');
+        if (sessionData) {
+            const { token } = JSON.parse(sessionData);
+            return { Authorization: `Bearer ${token}` };
+        }
+        return null;
+    };
+
     // --- RESCHEDULE HANDLER ---
     const handleReschedule = async (appointmentId: number) => {
         const newDate = prompt("Enter new date (YYYY-MM-DD):", "2026-05-13");
         const newTime = prompt("Enter new time (HH:MM):", "10:00");
 
         if (newDate && newTime) {
-            try {
-                const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
-                const token = sessionData.token;
+            const headers = getAuthHeader();
+            if (!headers) {
+                alert("Session expired. Please log in again.");
+                return;
+            }
 
-                await axios.post(`http://127.0.0.1:8000/accounts/appointments/${appointmentId}/reschedule/`, 
+            try {
+                // Ensure this URL matches your backend exactly
+                await axios.post(`${import.meta.env.VITE_API_URL}/mp/appointments/${appointmentId}/reschedule/`, 
                     { date: newDate, time: newTime },
-                    { headers: { 'Authorization': `Token ${token}` } }
+                    { headers }
                 );
 
                 alert("Rescheduled successfully!");
-                // Refresh list
                 fetchAppointments(); 
             } catch (error) {
                 console.error("Reschedule error:", error);
-                alert("Failed to reschedule. Please check the date/time format.");
+                alert("Failed to reschedule. Please check format or permissions.");
             }
         }
     };
 
     const fetchAppointments = async () => {
+        const headers = getAuthHeader();
+        
+        if (!headers) {
+            console.error("No auth token found in localStorage");
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
-            const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
-            const token = sessionData.token;
-
-            const response = await axios.get('http://127.0.0.1:8000/accounts/appointments/', {
-                params: { tab: activeTab },
-                headers: { 'Authorization': `Token ${token}` }
-            });
-            setAppointments(response.data);
-        } catch (error) {
-            console.error("Error fetching appointments:", error);
+            // Updated URL to use /mp/ based on your backend setup
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/mp/appointments/?tab=${activeTab}`, { headers });
+            setAppointments(res.data);
+        } catch (err: any) {
+            console.error("Error fetching appointments:", err);
+            if (err.response?.status === 401) {
+                console.error("Unauthorized: Token might be invalid or expired.");
+            }
         } finally {
             setLoading(false);
         }
@@ -115,13 +134,15 @@ const Appointments: React.FC = () => {
                             
                             <div className="flex-1">
                                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                                    appt.status === 'CURRENT' 
+                                    (appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED'))
                                         ? 'bg-blue-50 text-blue-600' 
-                                        : appt.status === 'COMPLETED'
+                                        : appt.status === 'COMPLETED' || appt.status === 'FINISHED'
                                             ? 'bg-slate-100 text-slate-500' 
                                             : 'bg-amber-50 text-amber-600'
                                 }`}>
-                                    {appt.status === 'CURRENT' ? 'Current Patient' : appt.status === 'COMPLETED' ? 'Finished' : 'Scheduled'}
+                                    {(appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED')) 
+                                        ? 'Current Patient' 
+                                        : (appt.status === 'COMPLETED' || appt.status === 'FINISHED') ? 'Finished' : 'Scheduled'}
                                 </span>
                                 
                                 <h3 className={`font-bold text-lg mt-0.5 ${
@@ -132,33 +153,34 @@ const Appointments: React.FC = () => {
                                 <p className="text-xs text-slate-500 font-mono">ID: {appt.display_id}</p>
                                 
                                 <p className="text-xs text-slate-600 mt-2 flex items-center gap-1.5 font-medium">
-                                    {appt.status === 'CURRENT' ? (
+                                    {(appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED')) ? (
                                         <FileText size={14} className="text-red-400" />
                                     ) : (
-                                        <CalendarDays size={14} className={appt.status === 'COMPLETED' ? 'text-slate-300' : 'text-amber-400'} />
+                                        <CalendarDays size={14} className={(appt.status === 'COMPLETED' || appt.status === 'FINISHED') ? 'text-slate-300' : 'text-amber-400'} />
                                     )}
                                     {appt.purpose}
                                 </p>
                             </div>
 
-                            <div className="flex gap-3">
-                                {appt.status === 'CURRENT' ? (
+                             <div className="flex gap-3">
+                                {(appt.status === 'CURRENT' || (activeTab === "Today's List" && appt.status === 'SCHEDULED')) ? (
                                     <button 
                                         onClick={() => navigate(`/consultation/${appt.id}`)}
-                                        className="bg-[#E32636] text-white px-6 py-3 rounded-xl text-xs font-bold shadow-md hover:bg-[#C52230] transition-all"
+                                        className="bg-[#E32636] text-white hover:bg-[#C52230] px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2"
                                     >
+                                        <FileText size={14} />
                                         Enter Medical Notes
                                     </button>
                                 ) : (
                                     <>
                                         <button 
                                             onClick={() => navigate(`/consultation/${appt.id}`)}
-                                            className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+                                            className="border border-slate-200 text-slate-600 hover:bg-slate-50 px-6 py-3 rounded-xl text-xs font-bold transition-all shadow-sm"
                                         >
                                             View History
                                         </button>
                                         
-                                        {appt.status !== 'COMPLETED' && (
+                                        {(appt.status !== 'COMPLETED' && appt.status !== 'FINISHED') && (
                                             <button 
                                                 onClick={() => handleReschedule(appt.id)}
                                                 className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
