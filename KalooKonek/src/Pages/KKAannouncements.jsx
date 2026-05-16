@@ -368,7 +368,7 @@ const handleDelete = async (id) => {
                 </span>
               </div>
 
-              <div style={{ marginBottom: 18 }}>
+              <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Headline</label>
 
                 <input
