@@ -114,7 +114,7 @@ export default function KKALogin({ onLoginSuccess }: { onLoginSuccess: (data: an
                   localStorage.setItem("sb-access-token", tokenValue);
 
                   onLoginSuccess(sessionData); 
-                  navigate("/dashboard"); 
+                  navigate("/staff/dashboard"); 
               } else {
                   alert("Authentication successful, but no token was provided by the server.");
               }

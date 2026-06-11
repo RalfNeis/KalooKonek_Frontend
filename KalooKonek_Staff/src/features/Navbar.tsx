@@ -34,10 +34,10 @@ const Navbar: React.FC<NavbarProps> = ({ adminName, onLogout }) => {
 
       {/* Navigation Links */}
       <div className="flex gap-8 text-xs font-bold uppercase tracking-wide">
-        <NavLink to="/dashboard" className={getLinkClass}>Dashboard</NavLink>
-        <NavLink to="/directory" className={getLinkClass}>Patient Directory</NavLink>
-        <NavLink to="/appointments" className={getLinkClass}>Appointments</NavLink>
-        <NavLink to="/settings" className={getLinkClass}>Settings</NavLink>
+        <NavLink to="/staff/dashboard" className={getLinkClass}>Dashboard</NavLink>
+        <NavLink to="/staff/directory" className={getLinkClass}>Patient Directory</NavLink>
+        <NavLink to="/staff/appointments" className={getLinkClass}>Appointments</NavLink>
+        <NavLink to="/staff/settings" className={getLinkClass}>Settings</NavLink>
       </div>
 
       {/* Profile & Controls */}

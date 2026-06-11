@@ -12,7 +12,7 @@ import Consultation from './features/Consultation';
 import "tailwindcss";
 
 const ProtectedRoute = ({ user, children }: { user: any; children: React.ReactNode }) => {
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/staff/login" replace />;
   return <>{children}</>; 
 };
 
@@ -56,7 +56,7 @@ function AppContent() {
     setUser(null);
   };
 
-  const isLoginPage = location.pathname === '/login';
+  const isLoginPage = location.pathname === '/staff/login';
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-12">
@@ -68,10 +68,10 @@ function AppContent() {
       )}
       
       <Routes>
-        <Route path="/login" element={<Login onLoginSuccess={handleLogin} />} />
+        <Route path="/staff/login" element={<Login onLoginSuccess={handleLogin} />} />
         
         <Route 
-          path="/dashboard" 
+          path="/staff/dashboard" 
           element={
             <ProtectedRoute user={user}>
               <DashboardWrapper 
@@ -84,7 +84,7 @@ function AppContent() {
         />
         
         <Route 
-          path="/directory" 
+          path="/staff/directory" 
           element={
             <ProtectedRoute user={user}>
               <PatientDirectory searchTerm={searchTerm} />
@@ -92,16 +92,16 @@ function AppContent() {
           } 
         />
 
-        <Route path="/appointments" element={<ProtectedRoute user={user}><Appointments /></ProtectedRoute>} />
+        <Route path="/staff/appointments" element={<ProtectedRoute user={user}><Appointments /></ProtectedRoute>} />
         
         <Route 
-          path="/consultation/:id" 
+          path="/staff/consultation/:id" 
           element={<ProtectedRoute user={user}><Consultation /></ProtectedRoute>} 
         />
 
-        <Route path="/settings" element={<ProtectedRoute user={user}><Settings /></ProtectedRoute>} /> 
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/staff/settings" element={<ProtectedRoute user={user}><Settings /></ProtectedRoute>} /> 
+        <Route path="/" element={<Navigate to="/staff/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/staff/login" replace />} />
       </Routes>
 
       {!isLoginPage && (

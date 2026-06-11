@@ -57,7 +57,7 @@ const Consultation: React.FC = () => {
             );
 
             alert("Consultation saved successfully!");
-            navigate('/appointments'); 
+            navigate('/staff/appointments'); 
         } catch (error) {
             console.error("Error saving consultation:", error);
             alert("Failed to save. Check the backend fields for 'clinical_findings' and 'diagnosis_prescription'.");
@@ -162,7 +162,7 @@ const Consultation: React.FC = () => {
                         </button>
                     ) : (
                         <button 
-                            onClick={() => navigate('/appointments')}
+                            onClick={() => navigate('/staff/appointments')}
                             className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition-all"
                         >
                             Back to Schedule

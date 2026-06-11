@@ -224,7 +224,7 @@ const Dashboard: React.FC<DashboardProps> = ({ externalSearchTerm }) => {
 
                             <div className="flex items-center justify-end gap-6 mt-8">
                                 <button 
-                                    onClick={() => window.location.href = '/appointments'}
+                                    onClick={() => window.location.href = '/staff/appointments'}
                                     className="text-gray-400 font-black text-[10px] uppercase tracking-widest hover:text-[#E53E3E] transition-colors"
                                 >
                                     View History

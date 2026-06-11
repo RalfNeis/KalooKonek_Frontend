@@ -144,7 +144,7 @@ const Appointments: React.FC = () => {
                             <div className="flex gap-3">
                                 {appt.status === 'CURRENT' ? (
                                     <button 
-                                        onClick={() => navigate(`/consultation/${appt.id}`)}
+                                        onClick={() => navigate(`/staff/consultation/${appt.id}`)}
                                         className="bg-[#E32636] text-white px-6 py-3 rounded-xl text-xs font-bold shadow-md hover:bg-[#C52230] transition-all"
                                     >
                                         Enter Medical Notes
@@ -152,7 +152,7 @@ const Appointments: React.FC = () => {
                                 ) : (
                                     <>
                                         <button 
-                                            onClick={() => navigate(`/consultation/${appt.id}`)}
+                                            onClick={() => navigate(`/staff/consultation/${appt.id}`)}
                                             className="px-5 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
                                         >
                                             View History
