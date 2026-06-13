@@ -9,6 +9,7 @@ import Appointments from './features/Appointments';
 import Settings from './features/Settings';
 import Login from './features/KKALogin'; 
 import Consultation from './features/Consultation'; 
+import PatientHistory from './features/PatientHistory';
 import "tailwindcss";
 
 const ProtectedRoute = ({ user, children }: { user: any; children: React.ReactNode }) => {
@@ -23,7 +24,7 @@ const DashboardWrapper = ({ user, onSearch, searchTerm }: {
 }) => (
   <main className="max-w-6xl mx-auto px-6 space-y-8 mt-8">
     <HeaderActions 
-      adminName={user?.adminId || user?.username || "Admin"} 
+      adminName={user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || "Staff"} 
       onSearch={onSearch} 
     />
     <Dashboard externalSearchTerm={searchTerm} /> 
@@ -62,7 +63,7 @@ function AppContent() {
     <div className="min-h-screen bg-[#F8FAFC] pb-12">
       {!isLoginPage && user && (
         <Navbar 
-          adminName={user?.adminId || user?.username || "Admin"} 
+          adminName={user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || "Staff"} 
           onLogout={handleLogout} 
         />
       )}
@@ -97,6 +98,11 @@ function AppContent() {
         <Route 
           path="/staff/consultation/:id" 
           element={<ProtectedRoute user={user}><Consultation /></ProtectedRoute>} 
+        />
+        
+        <Route 
+          path="/staff/patient-history/:id" 
+          element={<ProtectedRoute user={user}><PatientHistory /></ProtectedRoute>} 
         />
 
         <Route path="/staff/settings" element={<ProtectedRoute user={user}><Settings /></ProtectedRoute>} /> 

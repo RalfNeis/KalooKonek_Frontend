@@ -21,7 +21,7 @@ const Settings: React.FC = () => {
         const fetchProfile = async () => {
             try {
                 const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
-                const response = await axios.get('http://127.0.0.1:8000/accounts/profile/details/', {
+                const response = await axios.get('http://127.0.0.1:8000/accounts/settings/details/', {
                     headers: { 'Authorization': `Token ${sessionData.token}` }
                 });
                 
@@ -45,7 +45,7 @@ const Settings: React.FC = () => {
             const token = sessionData.token;
 
             // Hits the update_profile_info view in your backend
-            await axios.put('http://127.0.0.1:8000/accounts/profile/update/', profileData, {
+            await axios.put('http://127.0.0.1:8000/accounts/settings/update/', profileData, {
                 headers: { 'Authorization': `Token ${token}` }
             });
 

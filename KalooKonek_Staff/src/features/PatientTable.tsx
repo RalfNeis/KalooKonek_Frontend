@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import PatientRow from '../components/PatientRow';
 
 interface PatientDirectoryProps {
@@ -7,6 +8,7 @@ interface PatientDirectoryProps {
 }
 
 const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSearch }) => {
+    const navigate = useNavigate();
     const [patients, setPatients] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
@@ -33,7 +35,7 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                     return;
                 }
 
-                const response = await axios.get(`http://127.0.0.1:8000/accounts/directory/`, {
+                const response = await axios.get(`http://127.0.0.1:8000/mp/directory/`, {
                     params: {
                         search: localSearchTerm,
                         barangay: selectedBarangay === 'All Barangays' ? '' : selectedBarangay,
@@ -106,12 +108,16 @@ const PatientTable: React.FC<PatientDirectoryProps> = ({ searchTerm: externalSea
                     ) : patients.length > 0 ? (
                         patients.map((patient: any) => (
                             <PatientRow 
-                                key={patient.id} 
-                                {...patient} 
-                                // Mapping the backend "last_visit" to your frontend "last_visit_date"
+                                key={patient.id}
+                                db_id={patient.id}
+                                id={patient.display_id || String(patient.id)}
+                                name={`${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient'}
+                                age={patient.age ?? 0}
+                                gender={patient.gender || 'N/A'}
+                                barangay={patient.barangay || 'N/A'}
                                 last_visit_date={patient.last_visit}
-                                // Example: If you want to show a hardcoded tag for now
                                 medical_tags={patient.age >= 60 ? ["SENIOR"] : []}
+                                onOpenRecord={(id) => navigate(`/staff/patient-history/${id}`)}
                             />
                         ))
                     ) : (

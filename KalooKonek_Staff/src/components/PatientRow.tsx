@@ -9,10 +9,12 @@ interface PatientRowProps {
     last_visit_date?: string;
     last_visit_type?: string;
     medical_tags?: string[]; // To handle the "HYPERTENSION" tag
+    db_id: number;
+    onOpenRecord?: (id: number) => void;
 }
 
 const PatientRow: React.FC<PatientRowProps> = ({ 
-    name, id, age, gender, barangay, last_visit_date, last_visit_type, medical_tags 
+    name, id, age, gender, barangay, last_visit_date, last_visit_type, medical_tags, db_id, onOpenRecord 
 }) => {
     return (
         <div className="grid grid-cols-5 px-6 py-5 items-center border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
@@ -54,7 +56,10 @@ const PatientRow: React.FC<PatientRowProps> = ({
 
             {/* COLUMN 5: ACTIONS */}
             <div className="flex justify-end">
-                <button className="bg-blue-50 text-blue-500 text-[10px] font-black px-4 py-2 rounded-lg hover:bg-blue-100 transition-all tracking-wider uppercase">
+                <button 
+                    onClick={() => onOpenRecord && onOpenRecord(db_id)}
+                    className="bg-blue-50 text-blue-500 text-[10px] font-black px-4 py-2 rounded-lg hover:bg-blue-100 transition-all tracking-wider uppercase"
+                >
                     Open Record
                 </button>
             </div>

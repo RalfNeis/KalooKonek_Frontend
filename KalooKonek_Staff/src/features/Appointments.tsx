@@ -31,7 +31,7 @@ const Appointments: React.FC = () => {
                 const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
                 const token = sessionData.token;
 
-                await axios.post(`http://127.0.0.1:8000/accounts/appointments/${appointmentId}/reschedule/`, 
+                await axios.post(`http://127.0.0.1:8000/mp/appointments/${appointmentId}/reschedule/`, 
                     { date: newDate, time: newTime },
                     { headers: { 'Authorization': `Token ${token}` } }
                 );
@@ -52,7 +52,7 @@ const Appointments: React.FC = () => {
             const sessionData = JSON.parse(localStorage.getItem('kka_admin_session') || '{}');
             const token = sessionData.token;
 
-            const response = await axios.get('http://127.0.0.1:8000/accounts/appointments/', {
+            const response = await axios.get('http://127.0.0.1:8000/mp/appointments/', {
                 params: { tab: activeTab },
                 headers: { 'Authorization': `Token ${token}` }
             });
